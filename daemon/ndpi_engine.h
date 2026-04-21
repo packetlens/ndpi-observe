@@ -1,0 +1,38 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#ifndef NDPI_ENGINE_H
+#define NDPI_ENGINE_H
+
+#include <stdint.h>
+#include "flow_table.h"
+
+typedef struct ndpi_detection_module_struct ndpi_mod_t;
+
+typedef struct {
+    ndpi_mod_t  *ndpi;
+    flow_table_t flows;
+
+    /* Stats */
+    uint64_t pkts_scanned;
+    uint64_t pkts_cached;
+    uint64_t ndpi_calls;
+    uint64_t flows_classified;
+    uint64_t flows_gave_up;
+
+    /* Per-app aggregated counters (app_id → totals across all flows) */
+    /* These are accessed by show applications / prometheus */
+    uint64_t app_bytes[512];
+    uint64_t app_packets[512];
+    uint64_t app_flows[512];
+} ndpi_engine_t;
+
+int  ndpi_engine_init(ndpi_engine_t *e);
+void ndpi_engine_process(ndpi_engine_t *e,
+                         const struct ndpi_obs_flow_event *evt,
+                         int verdict_map_fd);
+void ndpi_engine_age(ndpi_engine_t *e);
+void ndpi_engine_destroy(ndpi_engine_t *e);
+
+/* Returns static string (thread-unsafe but fine for single-threaded daemon) */
+const char *ndpi_engine_app_name(ndpi_engine_t *e, uint16_t app_id);
+
+#endif /* NDPI_ENGINE_H */

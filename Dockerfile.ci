@@ -1,0 +1,9 @@
+ARG BASE_IMAGE=ndpi-observe-base
+FROM ${BASE_IMAGE}
+
+COPY . /src/
+WORKDIR /src
+
+RUN scripts/build-daemon.sh
+
+ENTRYPOINT ["scripts/run-tests.sh"]

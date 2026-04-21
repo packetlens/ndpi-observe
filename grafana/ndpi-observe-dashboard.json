@@ -1,0 +1,69 @@
+{
+  "title": "ndpi-observe",
+  "uid": "ndpi-observe",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active Flows",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "targets": [{
+        "expr": "ndpi_observe_flows_active",
+        "legendFormat": "active"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Flows Created (total)",
+      "type": "stat",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "targets": [{
+        "expr": "ndpi_observe_flows_created_total",
+        "legendFormat": "created"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "Packets Scanned vs Cached",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "rate(ndpi_observe_packets_scanned_total[1m])",
+          "legendFormat": "scanned/s"
+        },
+        {
+          "expr": "rate(ndpi_observe_packets_cached_total[1m])",
+          "legendFormat": "cached/s (in-kernel)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Bytes per Application",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10},
+      "targets": [{
+        "expr": "topk(10, rate(ndpi_observe_app_bytes_total[1m]))",
+        "legendFormat": "{{app}}"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Top Applications by Bytes",
+      "type": "bargauge",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "topk(10, ndpi_observe_app_bytes_total)",
+        "legendFormat": "{{app}}"
+      }],
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      }
+    }
+  ]
+}

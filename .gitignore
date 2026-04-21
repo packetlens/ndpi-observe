@@ -1,0 +1,15 @@
+# Build artifacts
+ndpid
+ndpictl
+bpf/ndpi_observe.bpf.o
+bpf/ndpi_observe.skel.h
+*.deb
+
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Editor
+.vscode/
+*.swp
