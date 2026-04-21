@@ -5,4 +5,4 @@ cd "$(dirname "$0")/.."
 
 echo "==> Building ndpi-observe..."
 make -j"$(nproc)"
-echo "==> Build complete: ndpid ndpictl"
+echo "==> Build complete: ndpid ndpid-simple ndpictl"

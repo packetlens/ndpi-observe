@@ -243,7 +243,7 @@ int main(int argc, char **argv)
     bpf_tc_hook_destroy(&hook_eg);
     ndpi_observe_bpf__destroy(skel);
 
-    if (cli_fd >= 0)  unix_socket_destroy(cli_fd);
+    if (cli_fd >= 0)  unix_socket_destroy(cli_fd, sock_path);
     if (prom_fd >= 0) prometheus_destroy(prom_fd);
 
     return 0;

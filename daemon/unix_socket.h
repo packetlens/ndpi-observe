@@ -8,6 +8,6 @@
 
 int  unix_socket_init(const char *path);
 void unix_socket_handle(int server_fd, ndpi_engine_t *e, int app_cnt_fd);
-void unix_socket_destroy(int server_fd);
+void unix_socket_destroy(int server_fd, const char *path);
 
 #endif /* UNIX_SOCKET_H */

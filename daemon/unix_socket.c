@@ -19,7 +19,16 @@
 
 int unix_socket_init(const char *path)
 {
-    mkdir("/run/ndpid", 0755);
+    /* Create the directory component of path */
+    char dir[256];
+    strncpy(dir, path, sizeof(dir) - 1);
+    dir[sizeof(dir) - 1] = '\0';
+    char *slash = strrchr(dir, '/');
+    if (slash && slash != dir) {
+        *slash = '\0';
+        /* Best-effort mkdir; ignore errors (may already exist) */
+        mkdir(dir, 0755);
+    }
     unlink(path);
 
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -219,8 +228,8 @@ void unix_socket_handle(int server_fd, ndpi_engine_t *e, int app_cnt_fd)
     close(cfd);
 }
 
-void unix_socket_destroy(int server_fd)
+void unix_socket_destroy(int server_fd, const char *path)
 {
     close(server_fd);
-    unlink(CLI_SOCK_PATH);
+    unlink(path);
 }
