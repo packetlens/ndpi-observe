@@ -76,20 +76,30 @@ send_to_ringbuf(struct __sk_buff *skb, const struct ndpi_obs_flow_key *key,
     evt->pkt_len = pkt_len;
 
     /*
-     * Compute copy_len from skb->len (u32 the verifier tracks cleanly).
-     * bpf_ntohs(ip->tot_len) loses bounds after bswap, so we use skb->len
-     * instead to derive the number of available IP-layer bytes.
+     * Tiered capture: try the largest size first (512 bytes — covers QUIC
+     * Initial packets ≥1200 bytes and large TLS frames ≥526 bytes), then fall
+     * back to progressively smaller constants so the BPF verifier can check
+     * buffer bounds statically.
+     *
+     * 256 bytes (frame ≥270): captures ~204 bytes of TLS payload — enough to
+     * reach the SNI extension in a typical curl/OpenSSL TLS 1.3 ClientHello
+     * (~350-400 byte frame).
+     * 128 bytes (frame ≥142): covers padded test frames and medium packets.
+     *  60 bytes (frame ≥74):  covers DNS queries (~77 byte frames).
+     *
+     * A failed bpf_skb_load_bytes writes nothing; data_len tells userspace
+     * how many bytes are valid.
      */
-    /*
-     * Use a compile-time constant length — the BPF verifier rejects variable-
-     * length reads through bpf_skb_load_bytes (ARG_CONST_SIZE, non-zero).
-     * 48 bytes covers IP(20)+UDP(8)+DNS(20) and IP(20)+TCP(20)+TLS_header(8).
-     * Fails gracefully for runt frames (data_len stays 0).
-     */
-    if (bpf_skb_load_bytes(skb, ip_off, evt->pkt_data, FLOW_EVENT_DATA_LEN) == 0)
+    if      (bpf_skb_load_bytes(skb, ip_off, evt->pkt_data, FLOW_EVENT_DATA_LEN) == 0)
         evt->data_len = FLOW_EVENT_DATA_LEN;
+    else if (bpf_skb_load_bytes(skb, ip_off, evt->pkt_data, 256) == 0)
+        evt->data_len = 256;
+    else if (bpf_skb_load_bytes(skb, ip_off, evt->pkt_data, 128) == 0)
+        evt->data_len = 128;
+    else if (bpf_skb_load_bytes(skb, ip_off, evt->pkt_data,  60) == 0)
+        evt->data_len = 60;
     else
-        evt->data_len = 0;
+        evt->data_len = 0xDEAD0000 | (skb->len & 0xFFFF);
 
     bpf_ringbuf_submit(evt, 0);
 }

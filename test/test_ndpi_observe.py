@@ -90,11 +90,11 @@ def _tls_client_hello(sni: str) -> bytes:
     return record
 
 
-_MIN_FRAME = 14 + 128  # must match FLOW_EVENT_DATA_LEN + ETH_HDR
+_MIN_FRAME = 14 + 128  # ensures the 128-byte fallback load in send_to_ringbuf succeeds
 
 
 def _pad_frame(frame):
-    """Pad to MIN_FRAME so bpf_skb_load_bytes(skb, 14, buf, 128) always succeeds."""
+    """Pad to MIN_FRAME so the 128-byte fallback bpf_skb_load_bytes always succeeds."""
     if len(frame) < _MIN_FRAME:
         frame += b'\x00' * (_MIN_FRAME - len(frame))
     return frame

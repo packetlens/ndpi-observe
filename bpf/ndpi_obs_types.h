@@ -19,12 +19,12 @@
 
 /*
  * IP packet bytes copied to ring buffer for nDPI classification.
- * 128 bytes covers IP(20)+TCP(20)+full_TLS_ClientHello(88) and captures
- * complete DNS payloads. Test frames must be padded to >= 142 bytes (14+128)
- * so bpf_skb_load_bytes(skb, 14, buf, 128) always succeeds; nDPI clips to
- * the real IP tot_len so padding bytes are never processed.
+ * 512 bytes is the primary load; the BPF program falls back to 128 then 60
+ * bytes for smaller packets (DNS ≈77 bytes, TCP SYN ≈66 bytes).
+ * Test frames pad to 14+128=142 bytes to guarantee the 128-byte fallback
+ * load succeeds; nDPI clips to the real IP tot_len so padding is invisible.
  */
-#define FLOW_EVENT_DATA_LEN 128
+#define FLOW_EVENT_DATA_LEN 512
 
 /* 5-tuple flow key (IPv4 only for now) */
 struct ndpi_obs_flow_key {
