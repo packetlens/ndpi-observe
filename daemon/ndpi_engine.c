@@ -212,9 +212,13 @@ void ndpi_engine_process(ndpi_engine_t *e,
                 if (f->ndpi_flow->host_server_name[0])
                     strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
                             SNI_MAX_LEN - 1);
+            }
 
-            } else if (f->ml_n_pkts > 0) {
-                /* Step 2: ML model fallback */
+            /* Step 2: ML model — runs on ALL flows (including giveup-classified ones).
+             * Giveup returns generic labels (TLS, Google, Cloudflare); ML can refine
+             * these into specific apps (YouTube, Netflix, Zoom, Steam, GitHub).
+             * Only override if ML is confident (threshold enforced in ndpi_ml_classify). */
+            if (f->ml_n_pkts > 0) {
                 ndpi_ml_features_t feat;
                 float n        = (float)f->ml_n_pkts;
                 float iat_n    = (n > 1.0f) ? (n - 1.0f) : 1.0f;
@@ -241,12 +245,20 @@ void ndpi_engine_process(ndpi_engine_t *e,
                 feat.last_pkt_len  = (float)f->ml_last_pkt;
 
                 uint16_t ml_app = ndpi_ml_classify(&feat);
-                if (ml_app != 0 /* NDPI_PROTOCOL_UNKNOWN */) {
+                if (ml_app != 0) {
+                    if (f->state == FLOW_STATE_CLASSIFIED) {
+                        /* ML refines a giveup result: undo the per-app giveup credit */
+                        if (f->app_id < 512)
+                            e->app_classified_giveup[f->app_id]--;
+                        e->flows_guessed--;
+                    } else {
+                        /* ML classifies a truly unknown flow */
+                        e->flows_classified++;
+                    }
                     f->app_id    = ml_app;
                     f->state     = FLOW_STATE_CLASSIFIED;
                     f->classified = 1;
                     e->flows_ml_classified++;
-                    e->flows_classified++;
                     if (f->app_id < 512)
                         e->app_classified_ml[f->app_id]++;
                 }
