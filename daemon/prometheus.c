@@ -48,25 +48,39 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
 
 #define APPEND(fmt, ...) pos += snprintf(body + pos, 131072 - pos, fmt, ##__VA_ARGS__)
 
+    const char *iface = e->iface[0] ? e->iface : "unknown";
+
+    APPEND("# HELP ndpi_observe_info Static daemon metadata\n");
+    APPEND("# TYPE ndpi_observe_info gauge\n");
+    APPEND("ndpi_observe_info{iface=\"%s\"} 1\n", iface);
+
     APPEND("# HELP ndpi_observe_flows_created_total Total flows seen\n");
     APPEND("# TYPE ndpi_observe_flows_created_total counter\n");
-    APPEND("ndpi_observe_flows_created_total %lu\n", e->flows.total_created);
+    APPEND("ndpi_observe_flows_created_total{iface=\"%s\"} %lu\n", iface, e->flows.total_created);
 
     APPEND("# HELP ndpi_observe_flows_classified_total Flows successfully classified\n");
     APPEND("# TYPE ndpi_observe_flows_classified_total counter\n");
-    APPEND("ndpi_observe_flows_classified_total %lu\n", e->flows_classified);
+    APPEND("ndpi_observe_flows_classified_total{iface=\"%s\"} %lu\n", iface, e->flows_classified);
+
+    APPEND("# HELP ndpi_observe_flows_guessed_total Flows rescued by ndpi_detection_giveup()\n");
+    APPEND("# TYPE ndpi_observe_flows_guessed_total counter\n");
+    APPEND("ndpi_observe_flows_guessed_total{iface=\"%s\"} %lu\n", iface, e->flows_guessed);
+
+    APPEND("# HELP ndpi_observe_flows_ml_total Flows rescued by ML model\n");
+    APPEND("# TYPE ndpi_observe_flows_ml_total counter\n");
+    APPEND("ndpi_observe_flows_ml_total{iface=\"%s\"} %lu\n", iface, e->flows_ml_classified);
 
     APPEND("# HELP ndpi_observe_flows_gave_up_total Flows that hit the give-up threshold\n");
     APPEND("# TYPE ndpi_observe_flows_gave_up_total counter\n");
-    APPEND("ndpi_observe_flows_gave_up_total %lu\n", e->flows_gave_up);
+    APPEND("ndpi_observe_flows_gave_up_total{iface=\"%s\"} %lu\n", iface, e->flows_gave_up);
 
     APPEND("# HELP ndpi_observe_flows_active Current active flows\n");
     APPEND("# TYPE ndpi_observe_flows_active gauge\n");
-    APPEND("ndpi_observe_flows_active %u\n", e->flows.count);
+    APPEND("ndpi_observe_flows_active{iface=\"%s\"} %u\n", iface, e->flows.count);
 
     APPEND("# HELP ndpi_observe_packets_scanned_total Packets sent to nDPI\n");
     APPEND("# TYPE ndpi_observe_packets_scanned_total counter\n");
-    APPEND("ndpi_observe_packets_scanned_total %lu\n", e->pkts_scanned);
+    APPEND("ndpi_observe_packets_scanned_total{iface=\"%s\"} %lu\n", iface, e->pkts_scanned);
 
     /* Per-app stats: merge userspace + BPF fast-path */
     uint64_t bytes[512]   = {};
@@ -99,18 +113,18 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
 
     APPEND("# HELP ndpi_observe_packets_fastpath_total Packets counted in BPF fast path (no userspace copy)\n");
     APPEND("# TYPE ndpi_observe_packets_fastpath_total counter\n");
-    APPEND("ndpi_observe_packets_fastpath_total %lu\n", bpf_fastpath_pkts);
+    APPEND("ndpi_observe_packets_fastpath_total{iface=\"%s\"} %lu\n", iface, bpf_fastpath_pkts);
 
     APPEND("# HELP ndpi_observe_bytes_fastpath_total Bytes counted in BPF fast path (no userspace copy)\n");
     APPEND("# TYPE ndpi_observe_bytes_fastpath_total counter\n");
-    APPEND("ndpi_observe_bytes_fastpath_total %lu\n", bpf_fastpath_bytes);
+    APPEND("ndpi_observe_bytes_fastpath_total{iface=\"%s\"} %lu\n", iface, bpf_fastpath_bytes);
 
     APPEND("# HELP ndpi_observe_app_bytes_total Bytes per application\n");
     APPEND("# TYPE ndpi_observe_app_bytes_total counter\n");
     for (int i = 0; i < 512; i++) {
         if (bytes[i] == 0) continue;
         const char *name = ndpi_engine_app_name(e, (uint16_t)i);
-        APPEND("ndpi_observe_app_bytes_total{app=\"%s\"} %lu\n", name, bytes[i]);
+        APPEND("ndpi_observe_app_bytes_total{iface=\"%s\",app=\"%s\"} %lu\n", iface, name, bytes[i]);
     }
 
     APPEND("# HELP ndpi_observe_app_packets_total Packets per application\n");
@@ -118,7 +132,7 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
     for (int i = 0; i < 512; i++) {
         if (packets[i] == 0) continue;
         const char *name = ndpi_engine_app_name(e, (uint16_t)i);
-        APPEND("ndpi_observe_app_packets_total{app=\"%s\"} %lu\n", name, packets[i]);
+        APPEND("ndpi_observe_app_packets_total{iface=\"%s\",app=\"%s\"} %lu\n", iface, name, packets[i]);
     }
 
     APPEND("# HELP ndpi_observe_app_flows_total Flows per application\n");
@@ -126,7 +140,7 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
     for (int i = 0; i < 512; i++) {
         if (flows[i] == 0) continue;
         const char *name = ndpi_engine_app_name(e, (uint16_t)i);
-        APPEND("ndpi_observe_app_flows_total{app=\"%s\"} %lu\n", name, flows[i]);
+        APPEND("ndpi_observe_app_flows_total{iface=\"%s\",app=\"%s\"} %lu\n", iface, name, flows[i]);
     }
 
     /* Process metrics from /proc/self/stat */
@@ -147,10 +161,10 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
             if (page <= 0) page = 4096;
             APPEND("# HELP process_cpu_seconds_total Total CPU time used by ndpid\n");
             APPEND("# TYPE process_cpu_seconds_total counter\n");
-            APPEND("process_cpu_seconds_total %.3f\n", cpu_sec);
+            APPEND("process_cpu_seconds_total{iface=\"%s\"} %.3f\n", iface, cpu_sec);
             APPEND("# HELP process_resident_memory_bytes RSS memory used by ndpid\n");
             APPEND("# TYPE process_resident_memory_bytes gauge\n");
-            APPEND("process_resident_memory_bytes %ld\n", rss * page);
+            APPEND("process_resident_memory_bytes{iface=\"%s\"} %ld\n", iface, rss * page);
         }
     }
 #undef APPEND

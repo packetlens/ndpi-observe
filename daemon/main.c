@@ -155,6 +155,7 @@ int main(int argc, char **argv)
         return 1;
     }
     ndpi_engine_set_ml(&engine, ml_enabled);
+    snprintf(engine.iface, sizeof(engine.iface), "%s", ifname);
     if (!ml_enabled)
         fprintf(stderr, "ndpid: ML/giveup disabled (--no-ml)\n");
 

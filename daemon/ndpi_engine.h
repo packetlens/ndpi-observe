@@ -22,6 +22,8 @@ typedef struct {
 
     int ml_enabled;  /* 1 = giveup+ML active (default); 0 = --no-ml */
 
+    char iface[64];  /* interface name for metric labels */
+
     /* Per-app aggregated counters (app_id → totals across all flows) */
     /* These are accessed by show applications / prometheus */
     uint64_t app_bytes[512];

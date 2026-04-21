@@ -3,9 +3,9 @@ services:
     image: ndpi-observe-ci:latest
     privileged: true
     network_mode: host
-    entrypoint: ["/src/ndpid"]
+    entrypoint: ["/src/ndpid-simple"]
     environment:
-      - IFACE=${IFACE:-eth0}
+      - IFACE=${IFACE:-wlp9s0f0}
     command: ["-i", "${IFACE:-wlp9s0f0}", "-p", "19197"]
     restart: unless-stopped
 
