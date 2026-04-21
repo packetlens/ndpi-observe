@@ -68,14 +68,12 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
     APPEND("# TYPE ndpi_observe_packets_scanned_total counter\n");
     APPEND("ndpi_observe_packets_scanned_total %lu\n", e->pkts_scanned);
 
-    APPEND("# HELP ndpi_observe_packets_cached_total Packets counted in fast path\n");
-    APPEND("# TYPE ndpi_observe_packets_cached_total counter\n");
-    APPEND("ndpi_observe_packets_cached_total %lu\n", e->pkts_cached);
-
     /* Per-app stats: merge userspace + BPF fast-path */
     uint64_t bytes[512]   = {};
     uint64_t packets[512] = {};
     uint64_t flows[512]   = {};
+    uint64_t bpf_fastpath_pkts  = 0;
+    uint64_t bpf_fastpath_bytes = 0;
 
     memcpy(bytes,   e->app_bytes,   sizeof(bytes));
     memcpy(packets, e->app_packets, sizeof(packets));
@@ -92,10 +90,20 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
                     bytes  [i] += per_cpu[c].bytes;
                     packets[i] += per_cpu[c].packets;
                     flows  [i] += per_cpu[c].flows;
+                    bpf_fastpath_pkts  += per_cpu[c].packets;
+                    bpf_fastpath_bytes += per_cpu[c].bytes;
                 }
             }
         }
     }
+
+    APPEND("# HELP ndpi_observe_packets_fastpath_total Packets counted in BPF fast path (no userspace copy)\n");
+    APPEND("# TYPE ndpi_observe_packets_fastpath_total counter\n");
+    APPEND("ndpi_observe_packets_fastpath_total %lu\n", bpf_fastpath_pkts);
+
+    APPEND("# HELP ndpi_observe_bytes_fastpath_total Bytes counted in BPF fast path (no userspace copy)\n");
+    APPEND("# TYPE ndpi_observe_bytes_fastpath_total counter\n");
+    APPEND("ndpi_observe_bytes_fastpath_total %lu\n", bpf_fastpath_bytes);
 
     APPEND("# HELP ndpi_observe_app_bytes_total Bytes per application\n");
     APPEND("# TYPE ndpi_observe_app_bytes_total counter\n");
@@ -119,6 +127,31 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
         if (flows[i] == 0) continue;
         const char *name = ndpi_engine_app_name(e, (uint16_t)i);
         APPEND("ndpi_observe_app_flows_total{app=\"%s\"} %lu\n", name, flows[i]);
+    }
+
+    /* Process metrics from /proc/self/stat */
+    {
+        FILE *f = fopen("/proc/self/stat", "r");
+        if (f) {
+            unsigned long utime = 0, stime = 0;
+            long rss = 0;
+            /* fields: pid(1) name(2) state(3) ... utime(14) stime(15) ... rss(24) */
+            fscanf(f, "%*d %*s %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u "
+                      "%lu %lu %*d %*d %*d %*d %*d %*d %*u %*u %ld",
+                   &utime, &stime, &rss);
+            fclose(f);
+            long clk = sysconf(_SC_CLK_TCK);
+            if (clk <= 0) clk = 100;
+            double cpu_sec = (double)(utime + stime) / (double)clk;
+            long page = sysconf(_SC_PAGE_SIZE);
+            if (page <= 0) page = 4096;
+            APPEND("# HELP process_cpu_seconds_total Total CPU time used by ndpid\n");
+            APPEND("# TYPE process_cpu_seconds_total counter\n");
+            APPEND("process_cpu_seconds_total %.3f\n", cpu_sec);
+            APPEND("# HELP process_resident_memory_bytes RSS memory used by ndpid\n");
+            APPEND("# TYPE process_resident_memory_bytes gauge\n");
+            APPEND("process_resident_memory_bytes %ld\n", rss * page);
+        }
     }
 #undef APPEND
 

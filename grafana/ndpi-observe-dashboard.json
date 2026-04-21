@@ -2,7 +2,7 @@
   "title": "ndpi-observe",
   "uid": "ndpi-observe",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "panels": [
     {
@@ -26,6 +26,40 @@
       }]
     },
     {
+      "id": 6,
+      "title": "Total Throughput",
+      "type": "stat",
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"steps": [{"color": "green", "value": null}]}
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(ndpi_observe_app_bytes_total[1m])) * 8",
+        "legendFormat": "bps"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "Total Packet Rate",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"steps": [{"color": "green", "value": null}]}
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(ndpi_observe_app_packets_total[1m]))",
+        "legendFormat": "pps"
+      }]
+    },
+    {
       "id": 3,
       "title": "Packets Scanned vs Cached",
       "type": "timeseries",
@@ -36,20 +70,10 @@
           "legendFormat": "scanned/s"
         },
         {
-          "expr": "rate(ndpi_observe_packets_cached_total[1m])",
-          "legendFormat": "cached/s (in-kernel)"
+          "expr": "rate(ndpi_observe_packets_fastpath_total[1m])",
+          "legendFormat": "fastpath/s (in-kernel)"
         }
       ]
-    },
-    {
-      "id": 4,
-      "title": "Bytes per Application",
-      "type": "timeseries",
-      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10},
-      "targets": [{
-        "expr": "topk(10, rate(ndpi_observe_app_bytes_total[1m]))",
-        "legendFormat": "{{app}}"
-      }]
     },
     {
       "id": 5,
@@ -64,6 +88,70 @@
         "orientation": "horizontal",
         "reduceOptions": {"calcs": ["lastNotNull"]}
       }
+    },
+    {
+      "id": 8,
+      "title": "Bits/s per Application",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {"lineWidth": 1, "fillOpacity": 10}
+        }
+      },
+      "targets": [{
+        "expr": "topk(10, rate(ndpi_observe_app_bytes_total[1m])) * 8",
+        "legendFormat": "{{app}}"
+      }]
+    },
+    {
+      "id": 9,
+      "title": "Packets/s per Application",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 10},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": {"lineWidth": 1, "fillOpacity": 10}
+        }
+      },
+      "targets": [{
+        "expr": "topk(10, rate(ndpi_observe_app_packets_total[1m]))",
+        "legendFormat": "{{app}}"
+      }]
+    },
+    {
+      "id": 10,
+      "title": "ndpid CPU Usage",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {"lineWidth": 2, "fillOpacity": 15}
+        }
+      },
+      "targets": [{
+        "expr": "rate(process_cpu_seconds_total{job=\"ndpi-observe\"}[1m])",
+        "legendFormat": "CPU %"
+      }]
+    },
+    {
+      "id": 11,
+      "title": "ndpid Memory (RSS)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {"lineWidth": 2, "fillOpacity": 15}
+        }
+      },
+      "targets": [{
+        "expr": "process_resident_memory_bytes{job=\"ndpi-observe\"}",
+        "legendFormat": "RSS"
+      }]
     }
   ]
 }

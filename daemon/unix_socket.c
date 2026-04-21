@@ -50,22 +50,36 @@ static void handle_show_version(int fd)
             NDPI_OBS_VERSION, ndpi_revision());
 }
 
-static void handle_show_stats(int fd, ndpi_engine_t *e)
+static void handle_show_stats(int fd, ndpi_engine_t *e, int app_cnt_fd)
 {
+    uint64_t bpf_fastpath_pkts = 0;
+    if (app_cnt_fd >= 0) {
+        int ncpu = libbpf_num_possible_cpus();
+        if (ncpu < 0) ncpu = 1;
+        if (ncpu > 256) ncpu = 256;
+        for (uint32_t i = 0; i < 512; i++) {
+            struct ndpi_obs_app_cnt per_cpu[256] = {};
+            if (bpf_map_lookup_elem(app_cnt_fd, &i, per_cpu) == 0) {
+                for (int c = 0; c < ncpu; c++)
+                    bpf_fastpath_pkts += per_cpu[c].packets;
+            }
+        }
+    }
+
     dprintf(fd,
         "flows created:     %lu\n"
         "flows classified:  %lu\n"
         "flows gave up:     %lu\n"
         "flows active:      %u\n"
         "packets scanned:   %lu\n"
-        "packets cached:    %lu\n"
+        "packets fastpath:  %lu\n"
         "nDPI calls:        %lu\n",
         e->flows.total_created,
         e->flows_classified,
         e->flows_gave_up,
         e->flows.count,
         e->pkts_scanned,
-        e->pkts_cached,
+        bpf_fastpath_pkts,
         e->ndpi_calls);
 }
 
@@ -185,7 +199,7 @@ void unix_socket_handle(int server_fd, ndpi_engine_t *e, int app_cnt_fd)
     if (strncmp(buf, "show version", 12) == 0) {
         handle_show_version(cfd);
     } else if (strncmp(buf, "show stats", 10) == 0) {
-        handle_show_stats(cfd, e);
+        handle_show_stats(cfd, e, app_cnt_fd);
     } else if (strncmp(buf, "show applications", 17) == 0) {
         int top = 20;
         char *p = strstr(buf, "top ");
