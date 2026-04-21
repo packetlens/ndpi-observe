@@ -143,6 +143,22 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
         APPEND("ndpi_observe_app_flows_total{iface=\"%s\",app=\"%s\"} %lu\n", iface, name, flows[i]);
     }
 
+    APPEND("# HELP ndpi_observe_app_classified_total Flows classified per app and method\n");
+    APPEND("# TYPE ndpi_observe_app_classified_total counter\n");
+    for (int i = 0; i < 512; i++) {
+        uint64_t n = e->app_classified_ndpi[i];
+        uint64_t g = e->app_classified_giveup[i];
+        uint64_t m = e->app_classified_ml[i];
+        if (n == 0 && g == 0 && m == 0) continue;
+        const char *name = ndpi_engine_app_name(e, (uint16_t)i);
+        if (n > 0)
+            APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"ndpi\"} %lu\n",   iface, name, n);
+        if (g > 0)
+            APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"giveup\"} %lu\n", iface, name, g);
+        if (m > 0)
+            APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"ml\"} %lu\n",     iface, name, m);
+    }
+
     /* Process metrics from /proc/self/stat */
     {
         FILE *f = fopen("/proc/self/stat", "r");

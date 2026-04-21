@@ -154,10 +154,46 @@
       ]
     },
     {
+      "id": 23,
+      "title": "Classification Method by App",
+      "description": "How each application's flows were identified: nDPI DPI signatures, giveup (port/heuristic fallback after 8 pkts), or ML model",
+      "type": "bargauge",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10},
+      "targets": [
+        {
+          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"ndpi\"})",
+          "legendFormat": "{{app}} — nDPI"
+        },
+        {
+          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"giveup\"})",
+          "legendFormat": "{{app}} — giveup"
+        },
+        {
+          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"ml\"})",
+          "legendFormat": "{{app}} — ML"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "groupWidth": 0.7
+      },
+      "fieldConfig": {
+        "overrides": [
+          {"matcher": {"id": "byFrameRefID", "options": "A"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byFrameRefID", "options": "B"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+          {"matcher": {"id": "byFrameRefID", "options": "C"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+        ]
+      }
+    },
+    {
       "id": 5,
       "title": "Top Applications by Bytes",
       "type": "bargauge",
-      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 10},
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 10},
       "targets": [{
         "expr": "topk(10, ndpi_observe_app_bytes_total{iface=~\"$iface\"})",
         "legendFormat": "{{app}}"
@@ -171,7 +207,7 @@
       "id": 8,
       "title": "Bits/s per Application",
       "type": "timeseries",
-      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 10},
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 10},
       "fieldConfig": {
         "defaults": {
           "unit": "bps",
@@ -187,7 +223,7 @@
       "id": 9,
       "title": "Packets/s per Application",
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 32, "w": 24, "h": 10},
       "fieldConfig": {
         "defaults": {
           "unit": "pps",
@@ -203,7 +239,7 @@
       "id": 10,
       "title": "ndpid CPU Usage",
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
+      "gridPos": {"x": 0, "y": 42, "w": 12, "h": 8},
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
@@ -219,7 +255,7 @@
       "id": 11,
       "title": "ndpid Memory (RSS)",
       "type": "timeseries",
-      "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 42, "w": 12, "h": 8},
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",

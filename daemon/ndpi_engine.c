@@ -177,6 +177,8 @@ void ndpi_engine_process(ndpi_engine_t *e,
         f->classified = 1;
         got_verdict  = 1;
         e->flows_classified++;
+        if (f->app_id < 512)
+            e->app_classified_ndpi[f->app_id]++;
 
         if (f->ndpi_flow->host_server_name[0])
             strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
@@ -204,6 +206,8 @@ void ndpi_engine_process(ndpi_engine_t *e,
                 f->classified = 1;
                 e->flows_guessed++;
                 e->flows_classified++;
+                if (f->app_id < 512)
+                    e->app_classified_giveup[f->app_id]++;
 
                 if (f->ndpi_flow->host_server_name[0])
                     strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
@@ -243,6 +247,8 @@ void ndpi_engine_process(ndpi_engine_t *e,
                     f->classified = 1;
                     e->flows_ml_classified++;
                     e->flows_classified++;
+                    if (f->app_id < 512)
+                        e->app_classified_ml[f->app_id]++;
                 }
             }
         }

@@ -29,6 +29,11 @@ typedef struct {
     uint64_t app_bytes[512];
     uint64_t app_packets[512];
     uint64_t app_flows[512];
+
+    /* Per-app classification method counters (incremented at classify time) */
+    uint64_t app_classified_ndpi[512];
+    uint64_t app_classified_giveup[512];
+    uint64_t app_classified_ml[512];
 } ndpi_engine_t;
 
 int  ndpi_engine_init(ndpi_engine_t *e);
