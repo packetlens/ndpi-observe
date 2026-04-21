@@ -48,10 +48,11 @@ static int ring_buf_cb(void *ctx, void *data, size_t size)
 static void usage(const char *prog)
 {
     fprintf(stderr,
-        "Usage: %s -i <interface> [-p <port>] [-s <socket>]\n"
-        "  -i  Network interface to observe (required)\n"
-        "  -p  Prometheus metrics port (default: %d)\n"
-        "  -s  CLI socket path (default: %s)\n",
+        "Usage: %s -i <interface> [-p <port>] [-s <socket>] [--no-ml]\n"
+        "  -i       Network interface to observe (required)\n"
+        "  -p       Prometheus metrics port (default: %d)\n"
+        "  -s       CLI socket path (default: %s)\n"
+        "  --no-ml  Disable ndpi_detection_giveup + ML fallback\n",
         prog, PROMETHEUS_PORT, CLI_SOCK_PATH);
 }
 
@@ -60,6 +61,15 @@ int main(int argc, char **argv)
     const char *ifname     = NULL;
     int         prom_port  = PROMETHEUS_PORT;
     const char *sock_path  = CLI_SOCK_PATH;
+    int         ml_enabled = 1;
+
+    /* Parse long options before getopt so --no-ml works */
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--no-ml") == 0) {
+            ml_enabled = 0;
+            argv[i] = (char *)"";  /* blank it out for getopt */
+        }
+    }
 
     int opt;
     while ((opt = getopt(argc, argv, "i:p:s:h")) != -1) {
@@ -144,6 +154,9 @@ int main(int argc, char **argv)
         ndpi_observe_bpf__destroy(skel);
         return 1;
     }
+    ndpi_engine_set_ml(&engine, ml_enabled);
+    if (!ml_enabled)
+        fprintf(stderr, "ndpid: ML/giveup disabled (--no-ml)\n");
 
     void *rb_ctx[2] = { &engine, &verdict_fd };
     struct ring_buffer *rb = ring_buffer__new(

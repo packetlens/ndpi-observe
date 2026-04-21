@@ -16,7 +16,11 @@ typedef struct {
     uint64_t pkts_cached;
     uint64_t ndpi_calls;
     uint64_t flows_classified;
+    uint64_t flows_guessed;       /* rescued by ndpi_detection_giveup() */
+    uint64_t flows_ml_classified; /* rescued by ML model */
     uint64_t flows_gave_up;
+
+    int ml_enabled;  /* 1 = giveup+ML active (default); 0 = --no-ml */
 
     /* Per-app aggregated counters (app_id → totals across all flows) */
     /* These are accessed by show applications / prometheus */
@@ -26,6 +30,7 @@ typedef struct {
 } ndpi_engine_t;
 
 int  ndpi_engine_init(ndpi_engine_t *e);
+void ndpi_engine_set_ml(ndpi_engine_t *e, int enabled);
 void ndpi_engine_process(ndpi_engine_t *e,
                          const struct ndpi_obs_flow_event *evt,
                          int verdict_map_fd);

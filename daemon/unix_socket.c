@@ -78,6 +78,8 @@ static void handle_show_stats(int fd, ndpi_engine_t *e, int app_cnt_fd)
     dprintf(fd,
         "flows created:     %lu\n"
         "flows classified:  %lu\n"
+        "flows guessed:     %lu\n"
+        "flows ml:          %lu\n"
         "flows gave up:     %lu\n"
         "flows active:      %u\n"
         "packets scanned:   %lu\n"
@@ -85,6 +87,8 @@ static void handle_show_stats(int fd, ndpi_engine_t *e, int app_cnt_fd)
         "nDPI calls:        %lu\n",
         e->flows.total_created,
         e->flows_classified,
+        e->flows_guessed,
+        e->flows_ml_classified,
         e->flows_gave_up,
         e->flows.count,
         e->pkts_scanned,

@@ -40,10 +40,11 @@ static void sig_handler(int sig) { (void)sig; g_running = 0; }
 static void usage(const char *prog)
 {
     fprintf(stderr,
-        "Usage: %s -i <interface> [-p <port>] [-s <socket>]\n"
-        "  -i  Network interface to observe (required)\n"
-        "  -p  Prometheus metrics port (default: %d)\n"
-        "  -s  CLI socket path (default: %s)\n",
+        "Usage: %s -i <interface> [-p <port>] [-s <socket>] [--no-ml]\n"
+        "  -i       Network interface to observe (required)\n"
+        "  -p       Prometheus metrics port (default: %d)\n"
+        "  -s       CLI socket path (default: %s)\n"
+        "  --no-ml  Disable ndpi_detection_giveup + ML fallback\n",
         prog, SIMPLE_PROM_PORT, SIMPLE_CLI_SOCK_PATH);
 }
 
@@ -52,6 +53,14 @@ int main(int argc, char **argv)
     const char *ifname    = NULL;
     int         prom_port = SIMPLE_PROM_PORT;
     const char *sock_path = SIMPLE_CLI_SOCK_PATH;
+    int         ml_enabled = 1;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--no-ml") == 0) {
+            ml_enabled = 0;
+            argv[i] = (char *)"";
+        }
+    }
 
     int opt;
     while ((opt = getopt(argc, argv, "i:p:s:h")) != -1) {
@@ -109,6 +118,9 @@ int main(int argc, char **argv)
         close(pkt_fd);
         return 1;
     }
+    ndpi_engine_set_ml(&engine, ml_enabled);
+    if (!ml_enabled)
+        fprintf(stderr, "ndpid-simple: ML/giveup disabled (--no-ml)\n");
 
     /* ── CLI Unix socket ─────────────────────────────────────────────── */
     int cli_fd = unix_socket_init(sock_path);

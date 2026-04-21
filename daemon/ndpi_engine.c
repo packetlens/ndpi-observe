@@ -2,9 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
+#include <arpa/inet.h>
 #include <bpf/bpf.h>
 #include <ndpi/ndpi_api.h>
 #include "ndpi_engine.h"
+#include "ndpi_ml.h"
 
 int ndpi_engine_init(ndpi_engine_t *e)
 {
@@ -20,7 +23,13 @@ int ndpi_engine_init(ndpi_engine_t *e)
     ndpi_finalize_initialization(e->ndpi);
 
     flow_table_init(&e->flows);
+    e->ml_enabled = 1;  /* giveup + ML on by default */
     return 0;
+}
+
+void ndpi_engine_set_ml(ndpi_engine_t *e, int enabled)
+{
+    e->ml_enabled = enabled;
 }
 
 const char *ndpi_engine_app_name(ndpi_engine_t *e, uint16_t app_id)
@@ -91,12 +100,36 @@ void ndpi_engine_process(ndpi_engine_t *e,
     e->pkts_scanned++;
     e->ndpi_calls++;
 
+    /* Accumulate ML features from the IP-layer packet length. */
+    {
+        uint16_t pkt_len = (evt->pkt_len > 0xFFFF) ? 0xFFFF : (uint16_t)evt->pkt_len;
+        double   now_s   = f->last_seen;
+
+        if (f->ml_n_pkts == 0) {
+            f->ml_first_pkt = pkt_len;
+            f->ml_pkt_min   = pkt_len;
+            f->ml_pkt_max   = pkt_len;
+            f->ml_iat_min   = 1e30f;
+            f->ml_iat_max   = 0.0f;
+        } else {
+            float iat_s = (float)(now_s - f->ml_last_pkt_time);
+            f->ml_iat_sum += iat_s;
+            f->ml_iat_sq  += iat_s * iat_s;
+            if (iat_s < f->ml_iat_min) f->ml_iat_min = iat_s;
+            if (iat_s > f->ml_iat_max) f->ml_iat_max = iat_s;
+        }
+        f->ml_pkt_sum += (float)pkt_len;
+        f->ml_pkt_sq  += (float)pkt_len * (float)pkt_len;
+        if (pkt_len < f->ml_pkt_min) f->ml_pkt_min = pkt_len;
+        if (pkt_len > f->ml_pkt_max) f->ml_pkt_max = pkt_len;
+        f->ml_last_pkt      = pkt_len;
+        f->ml_last_pkt_time = now_s;
+        f->ml_n_pkts++;
+    }
+
     /*
      * Patch a local copy of the packet so nDPI sees a self-consistent
      * truncated packet rather than a large packet with missing bytes.
-     * Without this, nDPI's TLS dissector checks if the full TLS record is
-     * present (record_len <= available_bytes) and returns UNKNOWN when the
-     * ClientHello is larger than our capture window.
      */
     uint8_t tmp_pkt[FLOW_EVENT_DATA_LEN];
     memcpy(tmp_pkt, evt->pkt_data, actual_data_len);
@@ -137,6 +170,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
     int got_verdict = 0;
 
     if (app != NDPI_PROTOCOL_UNKNOWN || master != NDPI_PROTOCOL_UNKNOWN) {
+        /* nDPI classified the flow */
         f->app_id    = (app != NDPI_PROTOCOL_UNKNOWN) ? app : master;
         f->category  = (uint16_t)proto.category;
         f->state     = FLOW_STATE_CLASSIFIED;
@@ -150,11 +184,74 @@ void ndpi_engine_process(ndpi_engine_t *e,
 
         ndpi_flow_free(f->ndpi_flow);
         f->ndpi_flow = NULL;
+
     } else if (f->pkt_count >= FLOW_MAX_CLASSIFY_PKTS) {
-        f->app_id   = 0;
-        f->state    = FLOW_STATE_GAVE_UP;
         got_verdict = 1;
-        e->flows_gave_up++;
+
+        if (e->ml_enabled) {
+            /* Step 1: nDPI built-in guesser (port-based + heuristic) */
+            u_int8_t was_guessed = 0;
+            ndpi_protocol gp = ndpi_detection_giveup(
+                e->ndpi, f->ndpi_flow, 1 /* enable_guess */, &was_guessed);
+
+            uint16_t ga = gp.app_protocol;
+            uint16_t gm = gp.master_protocol;
+
+            if (ga != NDPI_PROTOCOL_UNKNOWN || gm != NDPI_PROTOCOL_UNKNOWN) {
+                f->app_id    = (ga != NDPI_PROTOCOL_UNKNOWN) ? ga : gm;
+                f->category  = (uint16_t)gp.category;
+                f->state     = FLOW_STATE_CLASSIFIED;
+                f->classified = 1;
+                e->flows_guessed++;
+                e->flows_classified++;
+
+                if (f->ndpi_flow->host_server_name[0])
+                    strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
+                            SNI_MAX_LEN - 1);
+
+            } else if (f->ml_n_pkts > 0) {
+                /* Step 2: ML model fallback */
+                ndpi_ml_features_t feat;
+                float n        = (float)f->ml_n_pkts;
+                float iat_n    = (n > 1.0f) ? (n - 1.0f) : 1.0f;
+                float pkt_mean = f->ml_pkt_sum / n;
+                float iat_mean = f->ml_iat_sum / iat_n;
+                float pkt_var  = (f->ml_pkt_sq / n) - pkt_mean * pkt_mean;
+                float iat_var  = (n > 2.0f)
+                    ? ((f->ml_iat_sq / iat_n) - iat_mean * iat_mean) : 0.0f;
+
+                feat.pkt_len_mean  = pkt_mean;
+                feat.pkt_len_std   = (pkt_var > 0.0f) ? sqrtf(pkt_var) : 0.0f;
+                feat.pkt_len_min   = (float)f->ml_pkt_min;
+                feat.pkt_len_max   = (float)f->ml_pkt_max;
+                feat.pkt_len_total = f->ml_pkt_sum;
+                feat.iat_mean_s    = iat_mean;
+                feat.iat_std_s     = (iat_var > 0.0f) ? sqrtf(iat_var) : 0.0f;
+                feat.iat_min_s     = (n > 1.0f) ? f->ml_iat_min : 0.0f;
+                feat.iat_max_s     = f->ml_iat_max;
+                feat.duration_s    = (float)(f->last_seen - f->first_seen);
+                feat.n_pkts        = n;
+                feat.proto         = (float)k->proto;
+                feat.dport         = (float)ntohs(k->dst_port);
+                feat.first_pkt_len = (float)f->ml_first_pkt;
+                feat.last_pkt_len  = (float)f->ml_last_pkt;
+
+                uint16_t ml_app = ndpi_ml_classify(&feat);
+                if (ml_app != 0 /* NDPI_PROTOCOL_UNKNOWN */) {
+                    f->app_id    = ml_app;
+                    f->state     = FLOW_STATE_CLASSIFIED;
+                    f->classified = 1;
+                    e->flows_ml_classified++;
+                    e->flows_classified++;
+                }
+            }
+        }
+
+        if (f->state != FLOW_STATE_CLASSIFIED) {
+            f->app_id = 0;
+            f->state  = FLOW_STATE_GAVE_UP;
+            e->flows_gave_up++;
+        }
 
         ndpi_flow_free(f->ndpi_flow);
         f->ndpi_flow = NULL;

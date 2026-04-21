@@ -36,6 +36,20 @@ typedef struct flow_entry {
 
     struct ndpi_flow_struct *ndpi_flow;  /* freed after classification */
 
+    /* ML feature accumulators — filled per packet, consumed at give-up */
+    float    ml_pkt_sum;
+    float    ml_pkt_sq;
+    uint16_t ml_pkt_min;
+    uint16_t ml_pkt_max;
+    uint16_t ml_first_pkt;
+    uint16_t ml_last_pkt;
+    float    ml_iat_sum;
+    float    ml_iat_sq;
+    float    ml_iat_min;
+    float    ml_iat_max;
+    double   ml_last_pkt_time;
+    uint8_t  ml_n_pkts;
+
     struct flow_entry *next;  /* hash chain */
 } flow_entry_t;
 

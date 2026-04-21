@@ -8,10 +8,11 @@ BPF_SRC  = bpf/ndpi_observe.bpf.c
 BPF_OBJ  = bpf/ndpi_observe.bpf.o
 BPF_SKEL = bpf/ndpi_observe.skel.h
 
+ML_SRCS           = daemon/ndpi_ml.c daemon/ndpi_ml_model.c
 DAEMON_SRCS       = daemon/main.c daemon/flow_table.c daemon/ndpi_engine.c \
-                    daemon/unix_socket.c daemon/prometheus.c
+                    daemon/unix_socket.c daemon/prometheus.c $(ML_SRCS)
 SIMPLE_SRCS       = daemon/main_noebpf.c daemon/flow_table.c daemon/ndpi_engine.c \
-                    daemon/unix_socket.c daemon/prometheus.c
+                    daemon/unix_socket.c daemon/prometheus.c $(ML_SRCS)
 CLI_SRCS          = cli/ndpictl.c
 
 CFLAGS            = -O2 -Wall -Wextra -g -I. -Idaemon -Ibpf
