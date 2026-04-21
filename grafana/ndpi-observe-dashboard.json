@@ -120,20 +120,16 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(ndpi_observe_flows_classified_total{iface=~\"$iface\"}[1m])) - sum(rate(ndpi_observe_flows_guessed_total{iface=~\"$iface\"}[1m])) - sum(rate(ndpi_observe_flows_ml_total{iface=~\"$iface\"}[1m]))",
-          "legendFormat": "nDPI classified"
-        },
-        {
-          "expr": "sum(rate(ndpi_observe_flows_guessed_total{iface=~\"$iface\"}[1m]))",
-          "legendFormat": "giveup rescued"
+          "expr": "sum(rate(ndpi_observe_flows_classified_total{iface=~\"$iface\"}[1m])) - sum(rate(ndpi_observe_flows_ml_total{iface=~\"$iface\"}[1m]))",
+          "legendFormat": "nDPI"
         },
         {
           "expr": "sum(rate(ndpi_observe_flows_ml_total{iface=~\"$iface\"}[1m]))",
-          "legendFormat": "ML rescued"
+          "legendFormat": "ML"
         },
         {
           "expr": "sum(rate(ndpi_observe_flows_gave_up_total{iface=~\"$iface\"}[1m]))",
-          "legendFormat": "still unknown"
+          "legendFormat": "unknown"
         }
       ]
     },
@@ -161,12 +157,8 @@
       "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10},
       "targets": [
         {
-          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"ndpi\"})",
+          "expr": "topk(20, sum by (iface, app) (ndpi_observe_app_classified_total{iface=~\"$iface\", method=~\"ndpi|giveup\"}))",
           "legendFormat": "{{app}} — nDPI"
-        },
-        {
-          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"giveup\"})",
-          "legendFormat": "{{app}} — giveup"
         },
         {
           "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"ml\"})",
@@ -183,8 +175,6 @@
           {"matcher": {"id": "byFrameRefID", "options": "A"},
            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
           {"matcher": {"id": "byFrameRefID", "options": "B"},
-           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
-          {"matcher": {"id": "byFrameRefID", "options": "C"},
            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
         ]
       }
