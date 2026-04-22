@@ -30,6 +30,11 @@ typedef struct {
 
     char iface[64];  /* interface name for metric labels */
 
+    /* Dynamic DNS-derived labels: SLD strings for unrecognized hostnames.
+     * App IDs 400-463 map to dyn_labels[0-63]. Populated at runtime. */
+    char dyn_labels[64][64];
+    int  dyn_label_count;
+
     /* Per-app aggregated counters (app_id → totals across all flows) */
     /* These are accessed by show applications / prometheus */
     uint64_t app_bytes[512];
@@ -40,8 +45,21 @@ typedef struct {
     uint64_t app_classified_ndpi[512];
     uint64_t app_classified_giveup[512];
     uint64_t app_classified_ml[512];
-    uint64_t app_classified_sni[512];   /* SNI/AI-service rule overrode ndpi/giveup */
+    uint64_t app_classified_ml_dns[512]; /* ML flows where DNS cache confirmed the result */
+    uint64_t app_classified_sni[512];    /* TLS ClientHello SNI overrode ndpi/giveup */
+    uint64_t app_classified_dns[512];    /* Passive DNS cache (no SNI) overrode ndpi/giveup */
+
+    /* Per-category traffic aggregates (nDPI category enum; <=64 covers all). */
+    uint64_t cat_bytes[64];
+    uint64_t cat_packets[64];
+    uint64_t cat_flows[64];
 } ndpi_engine_t;
+
+/* Returns nDPI category name string; uses app_id→category lookup. */
+const char *ndpi_engine_category_name(ndpi_engine_t *e, uint16_t app_id);
+uint8_t     ndpi_engine_category_id(ndpi_engine_t *e, uint16_t app_id);
+/* SNI-aware variant: applies override map for known product subdomains. */
+uint8_t     ndpi_engine_category_for(ndpi_engine_t *e, uint16_t app_id, const char *sni);
 
 int  ndpi_engine_init(ndpi_engine_t *e);
 void ndpi_engine_set_ml(ndpi_engine_t *e, int enabled);

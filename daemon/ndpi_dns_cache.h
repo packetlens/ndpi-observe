@@ -13,7 +13,8 @@
 
 typedef struct {
     uint32_t ip;
-    uint32_t expires;       /* unix timestamp */
+    uint32_t expires;        /* unix timestamp */
+    uint16_t cached_app_id;  /* resolved app_id (0 = not yet resolved) */
     char     hostname[80];
 } dns_cache_entry_t;
 
@@ -33,19 +34,27 @@ static inline void dns_cache_insert(dns_cache_t *c, uint32_t ip,
                                      const char *name, uint32_t ttl)
 {
     uint32_t idx = _dns_hash(ip);
-    c->entries[idx].ip      = ip;
-    c->entries[idx].expires = (uint32_t)time(NULL) + (ttl > 300 ? 300 : ttl);
+    c->entries[idx].ip             = ip;
+    c->entries[idx].expires        = (uint32_t)time(NULL) + (ttl > 300 ? 300 : ttl);
+    c->entries[idx].cached_app_id  = 0;  /* reset — new hostname may resolve differently */
     strncpy(c->entries[idx].hostname, name, sizeof(c->entries[idx].hostname) - 1);
     c->entries[idx].hostname[sizeof(c->entries[idx].hostname) - 1] = '\0';
 }
 
-static inline const char *dns_cache_lookup(dns_cache_t *c, uint32_t ip)
+/* Returns the live entry for ip, or NULL if absent/expired. */
+static inline dns_cache_entry_t *dns_cache_lookup_entry(dns_cache_t *c, uint32_t ip)
 {
     uint32_t idx = _dns_hash(ip);
     dns_cache_entry_t *e = &c->entries[idx];
     if (e->ip == ip && e->hostname[0] && (uint32_t)time(NULL) < e->expires)
-        return e->hostname;
+        return e;
     return NULL;
+}
+
+static inline const char *dns_cache_lookup(dns_cache_t *c, uint32_t ip)
+{
+    dns_cache_entry_t *e = dns_cache_lookup_entry(c, ip);
+    return e ? e->hostname : NULL;
 }
 
 /* Parse a DNS response from raw IPv4 packet data and insert A records.

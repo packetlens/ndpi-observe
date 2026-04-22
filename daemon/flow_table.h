@@ -26,7 +26,7 @@ typedef struct flow_entry {
     uint16_t category;
     uint8_t  classified;
     uint8_t  credit_method; /* which counter holds the classification credit:
-                               0=none 1=ndpi 2=giveup 3=sni 4=ml */
+                               0=none 1=ndpi 2=giveup 3=sni 4=ml 5=dns */
 
     uint64_t bytes;
     uint64_t packets;

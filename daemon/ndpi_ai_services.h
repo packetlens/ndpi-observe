@@ -28,6 +28,7 @@
 #define NDPI_APP_MEDIUM_MCP     314  /* api.medium.com                          */
 #define NDPI_APP_CLOUDFLARE_MCP 315  /* cloudflare.com (Workers AI/Cloudflare)  */
 
+
 static inline const char *ndpi_ai_app_name(uint16_t id)
 {
     switch (id) {
@@ -107,16 +108,29 @@ static inline uint16_t dns_match_app(const char *host)
     uint16_t ai = match_ai_service(host);
     if (ai) return ai;
 
-    /* Well-known app CDN/API domains */
+    /* Well-known app CDN/API domains.
+     * More-specific entries MUST appear before less-specific ones (strstr match). */
     static const struct { const char *domain; uint16_t id; } t[] = {
+        /* YouTube */
         { "youtube.com",           124 },
         { "googlevideo.com",       124 },
         { "ytimg.com",             124 },
+        /* GitHub */
         { "github.com",            203 },
         { "githubusercontent.com", 203 },
         { "githubcopilot.com",     203 },
+        /* Zoom */
         { "zoom.us",               189 },
         { "zoom.com",              189 },
+        /* Google Meet/Chat signaling — more specific than google.com */
+        { "clients6.google.com",   201 },
+        /* Google CDNs and APIs */
+        { "gstatic.com",           126 },
+        { "googleusercontent.com", 126 },
+        { "gvt2.com",              126 },
+        { "googleapis.com",        126 },
+        /* Google generic — catches accounts.google.com, www.google.com, etc. */
+        { "google.com",            126 },
         { NULL, 0 }
     };
     for (int i = 0; t[i].domain; i++)

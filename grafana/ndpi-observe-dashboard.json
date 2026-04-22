@@ -152,7 +152,7 @@
     {
       "id": 23,
       "title": "Classification Method by App",
-      "description": "How each application's flows were identified: nDPI DPI signatures, giveup (port/heuristic fallback after 8 pkts), ML model, or SNI hostname rules",
+      "description": "How each application's flows were identified: nDPI DPI signatures, giveup (port/heuristic fallback after 8 pkts), ML model, SNI (TLS ClientHello), or DNS (passive DNS cache)",
       "type": "bargauge",
       "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10},
       "targets": [
@@ -167,6 +167,10 @@
         {
           "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"sni\"})",
           "legendFormat": "{{app}} — SNI"
+        },
+        {
+          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"dns\"})",
+          "legendFormat": "{{app}} — DNS"
         }
       ],
       "options": {
@@ -181,15 +185,51 @@
           {"matcher": {"id": "byFrameRefID", "options": "B"},
            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
           {"matcher": {"id": "byFrameRefID", "options": "C"},
-           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]}
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+          {"matcher": {"id": "byFrameRefID", "options": "D"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]}
         ]
+      }
+    },
+    {
+      "id": 30,
+      "title": "Traffic Type — Bytes Share",
+      "description": "Percentage of total bytes per traffic category (nDPI category enum)",
+      "type": "piechart",
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 10},
+      "targets": [{
+        "expr": "sum by (category) (ndpi_observe_category_bytes_total{iface=~\"$iface\"})",
+        "legendFormat": "{{category}}"
+      }],
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"],
+        "legend": {"displayMode": "list", "placement": "right", "values": ["percent"]},
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
+      }
+    },
+    {
+      "id": 31,
+      "title": "Traffic Type — Flows Share",
+      "description": "Percentage of total flows per traffic category",
+      "type": "piechart",
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 10},
+      "targets": [{
+        "expr": "sum by (category) (ndpi_observe_category_flows_total{iface=~\"$iface\"})",
+        "legendFormat": "{{category}}"
+      }],
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"],
+        "legend": {"displayMode": "list", "placement": "right", "values": ["percent"]},
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
       }
     },
     {
       "id": 5,
       "title": "Top Applications by Bytes",
       "type": "bargauge",
-      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 10},
+      "gridPos": {"x": 0, "y": 32, "w": 12, "h": 10},
       "targets": [{
         "expr": "topk(10, ndpi_observe_app_bytes_total{iface=~\"$iface\"})",
         "legendFormat": "{{app}}"
@@ -203,7 +243,7 @@
       "id": 8,
       "title": "Bits/s per Application",
       "type": "timeseries",
-      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 10},
+      "gridPos": {"x": 12, "y": 32, "w": 12, "h": 10},
       "fieldConfig": {
         "defaults": {
           "unit": "bps",
@@ -219,7 +259,7 @@
       "id": 9,
       "title": "Packets/s per Application",
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 32, "w": 24, "h": 10},
+      "gridPos": {"x": 0, "y": 42, "w": 24, "h": 10},
       "fieldConfig": {
         "defaults": {
           "unit": "pps",
@@ -264,11 +304,48 @@
       }]
     },
     {
+      "id": 16,
+      "title": "Auto-Discovered Labels",
+      "description": "SaaS tools identified automatically from DNS hostnames — no manual configuration. Label = registered domain (SLD+TLD) extracted from observed hostnames.",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 60, "w": 8, "h": 10},
+      "options": {
+        "sortBy": [{"displayName": "Label", "desc": false}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {"custom": {"filterable": true}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "label"},
+           "properties": [{"id": "displayName", "value": "Label"}]},
+          {"matcher": {"id": "byName", "options": "id"},
+           "properties": [{"id": "displayName", "value": "App ID"},
+                          {"id": "custom.width", "value": 70}]},
+          {"matcher": {"id": "byName", "options": "Value"},
+           "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "iface"},
+           "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "Time"},
+           "properties": [{"id": "custom.hidden", "value": true}]}
+        ]
+      },
+      "targets": [{
+        "expr": "ndpi_observe_dyn_label_info{iface=~\"$iface\"}",
+        "legendFormat": "",
+        "instant": true,
+        "format": "table"
+      }],
+      "transformations": [
+        {"id": "filterFieldsByName", "options": {"include": {"names": ["label","id","Value","iface","Time"]}}},
+        {"id": "sortBy", "options": {"fields": [{"displayName": "Label", "desc": false}]}}
+      ]
+    },
+    {
       "id": 15,
       "title": "DNS Cache Entries",
       "description": "All active IP→hostname mappings observed from DNS A responses. TTL = seconds until expiry.",
       "type": "table",
-      "gridPos": {"x": 0, "y": 50, "w": 12, "h": 10},
+      "gridPos": {"x": 8, "y": 60, "w": 16, "h": 10},
       "options": {
         "sortBy": [{"displayName": "hostname", "desc": false}],
         "footer": {"show": false}
@@ -306,7 +383,7 @@
       "title": "DNS Cache Occupancy",
       "description": "Active IP→hostname entries in the passive DNS cache (populated from observed DNS A responses). Used for flow classification confirmation.",
       "type": "timeseries",
-      "gridPos": {"x": 12, "y": 50, "w": 12, "h": 10},
+      "gridPos": {"x": 0, "y": 70, "w": 24, "h": 8},
       "fieldConfig": {
         "defaults": {
           "unit": "short",

@@ -14,6 +14,7 @@
 #include <arpa/inet.h>
 #include <bpf/libbpf.h>
 #include <bpf/bpf.h>
+#include <ndpi/ndpi_api.h>
 #include "prometheus.h"
 #include "../bpf/ndpi_obs_types.h"
 
@@ -150,7 +151,8 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
         uint64_t g = e->app_classified_giveup[i];
         uint64_t m = e->app_classified_ml[i];
         uint64_t s = e->app_classified_sni[i];
-        if (n == 0 && g == 0 && m == 0 && s == 0) continue;
+        uint64_t d = e->app_classified_dns[i];
+        if (n == 0 && g == 0 && m == 0 && s == 0 && d == 0) continue;
         const char *name = ndpi_engine_app_name(e, (uint16_t)i);
         if (n > 0)
             APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"ndpi\"} %lu\n",   iface, name, n);
@@ -160,6 +162,34 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
             APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"ml\"} %lu\n",     iface, name, m);
         if (s > 0)
             APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"sni\"} %lu\n",    iface, name, s);
+        if (d > 0)
+            APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"dns\"} %lu\n",    iface, name, d);
+    }
+
+    /* Traffic category aggregates (nDPI category enum). */
+    APPEND("# HELP ndpi_observe_category_bytes_total Bytes per traffic category\n");
+    APPEND("# TYPE ndpi_observe_category_bytes_total counter\n");
+    for (int c = 0; c < 64; c++) {
+        if (e->cat_bytes[c] == 0) continue;
+        const char *cname = ndpi_category_get_name(e->ndpi, (ndpi_protocol_category_t)c);
+        APPEND("ndpi_observe_category_bytes_total{iface=\"%s\",category=\"%s\"} %lu\n",
+               iface, cname ? cname : "Unspecified", e->cat_bytes[c]);
+    }
+    APPEND("# HELP ndpi_observe_category_packets_total Packets per traffic category\n");
+    APPEND("# TYPE ndpi_observe_category_packets_total counter\n");
+    for (int c = 0; c < 64; c++) {
+        if (e->cat_packets[c] == 0) continue;
+        const char *cname = ndpi_category_get_name(e->ndpi, (ndpi_protocol_category_t)c);
+        APPEND("ndpi_observe_category_packets_total{iface=\"%s\",category=\"%s\"} %lu\n",
+               iface, cname ? cname : "Unspecified", e->cat_packets[c]);
+    }
+    APPEND("# HELP ndpi_observe_category_flows_total Flows per traffic category\n");
+    APPEND("# TYPE ndpi_observe_category_flows_total counter\n");
+    for (int c = 0; c < 64; c++) {
+        if (e->cat_flows[c] == 0) continue;
+        const char *cname = ndpi_category_get_name(e->ndpi, (ndpi_protocol_category_t)c);
+        APPEND("ndpi_observe_category_flows_total{iface=\"%s\",category=\"%s\"} %lu\n",
+               iface, cname ? cname : "Unspecified", e->cat_flows[c]);
     }
 
     /* DNS cache — occupancy summary + per-entry labeled metrics */
@@ -182,6 +212,16 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
         APPEND("# HELP ndpi_observe_dns_cache_size Total slots in the DNS cache\n");
         APPEND("# TYPE ndpi_observe_dns_cache_size gauge\n");
         APPEND("ndpi_observe_dns_cache_size{iface=\"%s\"} %d\n", iface, DNS_CACHE_SIZE);
+    }
+
+    /* Dynamic DNS-derived label pool */
+    if (e->dyn_label_count > 0) {
+        APPEND("# HELP ndpi_observe_dyn_label_info Auto-discovered SaaS labels from DNS hostnames\n");
+        APPEND("# TYPE ndpi_observe_dyn_label_info gauge\n");
+        for (int i = 0; i < e->dyn_label_count; i++) {
+            APPEND("ndpi_observe_dyn_label_info{iface=\"%s\",label=\"%s\",id=\"%d\"} 1\n",
+                   iface, e->dyn_labels[i], 400 + i);
+        }
     }
 
     /* Process metrics from /proc/self/stat */

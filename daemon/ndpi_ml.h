@@ -27,6 +27,11 @@ typedef struct {
     float last_pkt_len;
 } ndpi_ml_features_t;
 
+struct ndpi_detection_module_struct;
+
+/* Resolve class names → nDPI proto IDs; call once after ndpi init. */
+void ndpi_ml_init(struct ndpi_detection_module_struct *ndpi);
+
 /* Returns nDPI app_protocol ID if model is confident, or 0 (UNKNOWN). */
 uint16_t ndpi_ml_classify(const ndpi_ml_features_t *feat);
 

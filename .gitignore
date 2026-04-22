@@ -1,5 +1,6 @@
 # Build artifacts
 ndpid
+ndpid-simple
 ndpictl
 bpf/ndpi_observe.bpf.o
 bpf/ndpi_observe.skel.h

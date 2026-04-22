@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include <math.h>
 #include <arpa/inet.h>
 #include <bpf/bpf.h>
@@ -23,6 +24,8 @@ int ndpi_engine_init(ndpi_engine_t *e)
     ndpi_set_protocol_detection_bitmask2(e->ndpi, &all);
     ndpi_finalize_initialization(e->ndpi);
 
+    ndpi_ml_init(e->ndpi);  /* resolve ML class names → proto IDs */
+
     flow_table_init(&e->flows);
     e->ml_enabled = 1;  /* giveup + ML on by default */
     return 0;
@@ -35,23 +38,191 @@ void ndpi_engine_set_ml(ndpi_engine_t *e, int enabled)
 
 void ndpi_engine_set_dump_features(ndpi_engine_t *e, const char *path)
 {
-    e->dump_features_fp = fopen(path, "w");
+    /* Append so data survives daemon restarts during training. */
+    int new_file = (access(path, F_OK) != 0);
+    e->dump_features_fp = fopen(path, "a");
     if (!e->dump_features_fp) {
         fprintf(stderr, "ndpid: warning: cannot open feature dump file %s\n", path);
         return;
     }
-    fprintf(e->dump_features_fp,
-        "label,pkt_len_mean,pkt_len_std,pkt_len_min,pkt_len_max,pkt_len_total,"
-        "iat_mean_s,iat_std_s,iat_min_s,iat_max_s,duration_s,n_pkts,"
-        "proto,dport,first_pkt_len,last_pkt_len\n");
+    if (new_file) {
+        fprintf(e->dump_features_fp,
+            "label,pkt_len_mean,pkt_len_std,pkt_len_min,pkt_len_max,pkt_len_total,"
+            "iat_mean_s,iat_std_s,iat_min_s,iat_max_s,duration_s,n_pkts,"
+            "proto,dport,first_pkt_len,last_pkt_len\n");
+    }
     fflush(e->dump_features_fp);
+}
+
+/* Override the nDPI category for known product subdomains where the parent
+ * protocol's category is misleading (music.youtube.com is audio, not video). */
+static uint8_t category_override_for_sni(const char *sni)
+{
+    if (!sni || !sni[0]) return 0xFF;
+    static const struct { const char *suffix; uint8_t cat; } overrides[] = {
+        { "music.youtube.com",   NDPI_PROTOCOL_CATEGORY_MUSIC         },
+        { "podcasts.google.com", NDPI_PROTOCOL_CATEGORY_MUSIC         },
+        { "studio.youtube.com",  NDPI_PROTOCOL_CATEGORY_WEB           },
+        { "meet.google.com",     NDPI_PROTOCOL_CATEGORY_VOIP          },
+        { "chat.google.com",     NDPI_PROTOCOL_CATEGORY_CHAT          },
+        { "mail.google.com",     NDPI_PROTOCOL_CATEGORY_MAIL          },
+        { "drive.google.com",    NDPI_PROTOCOL_CATEGORY_DATA_TRANSFER },
+        { "docs.google.com",     NDPI_PROTOCOL_CATEGORY_COLLABORATIVE },
+        { NULL, 0 }
+    };
+    size_t slen = strlen(sni);
+    for (int i = 0; overrides[i].suffix; i++) {
+        size_t nlen = strlen(overrides[i].suffix);
+        if (slen >= nlen) {
+            const char *suf = sni + (slen - nlen);
+            if (strcmp(suf, overrides[i].suffix) == 0 &&
+                (suf == sni || *(suf - 1) == '.'))
+                return overrides[i].cat;
+        }
+    }
+    return 0xFF;  /* no override */
+}
+
+uint8_t ndpi_engine_category_id(ndpi_engine_t *e, uint16_t app_id)
+{
+    /* Dynamic labels (400-463): default to WEB (category 5). */
+    if (app_id >= 400) return NDPI_PROTOCOL_CATEGORY_WEB;
+    ndpi_protocol p = { app_id, app_id, 0, NULL };
+    ndpi_protocol_category_t cat = ndpi_get_proto_category(e->ndpi, p);
+    return (uint8_t)(cat < 64 ? cat : NDPI_PROTOCOL_CATEGORY_UNSPECIFIED);
+}
+
+/* Variant that also consults the SNI override table. */
+uint8_t ndpi_engine_category_for(ndpi_engine_t *e, uint16_t app_id, const char *sni)
+{
+    uint8_t ov = category_override_for_sni(sni);
+    if (ov != 0xFF) return ov;
+    return ndpi_engine_category_id(e, app_id);
+}
+
+const char *ndpi_engine_category_name(ndpi_engine_t *e, uint16_t app_id)
+{
+    uint8_t cat = ndpi_engine_category_id(e, app_id);
+    const char *name = ndpi_category_get_name(e->ndpi, (ndpi_protocol_category_t)cat);
+    return name ? name : "Unspecified";
 }
 
 const char *ndpi_engine_app_name(ndpi_engine_t *e, uint16_t app_id)
 {
     const char *ai = ndpi_ai_app_name(app_id);
     if (ai) return ai;
+    if (app_id >= 400 && app_id < 464) {
+        int idx = app_id - 400;
+        if (idx < e->dyn_label_count)
+            return e->dyn_labels[idx];
+    }
     return ndpi_get_proto_name(e->ndpi, app_id);
+}
+
+/* Reduce a hostname to a clean display label. Strips infrastructure /
+ * CDN-style subdomains but keeps subdomains that look like product names.
+ *
+ *   "music.youtube.com"               → "music.youtube.com"  (kept: product)
+ *   "meet.google.com"                 → "meet.google.com"    (kept: product)
+ *   "api.spotify.com"                 → "spotify.com"        (api: generic)
+ *   "api-partner.spotify.com"         → "spotify.com"        (hyphen: CDN-like)
+ *   "edge-web.dual-gslb.spotify.com"  → "spotify.com"        (recurse)
+ *   "f2f-server-prod-3.herokuapp.com" → "herokuapp.com"      (digits: generated)
+ *   "r3---sn-abc.googlevideo.com"     → "googlevideo.com"
+ *
+ * Returns pointer into a static buffer. */
+/* Compute a clean display label for a hostname.
+ *   1. Ask nDPI's hostname database — if it knows the app, use its name
+ *      ("aet.spotify.com" → "Spotify", "music.youtube.com" → "YouTube").
+ *   2. Otherwise, return a single word from the SLD
+ *      ("static.phantombuster.com" → "phantombuster",
+ *       "f2f-server.herokuapp.com" → "herokuapp",
+ *       "fly.io" → "fly"). */
+static const char *clean_label(ndpi_engine_t *e, const char *host)
+{
+    /* Step 1: try nDPI's hostname database. */
+    ndpi_protocol_match_result match;
+    memset(&match, 0, sizeof(match));
+    u_int16_t proto_id = ndpi_match_string_subprotocol(
+        e->ndpi, (char *)host, (u_int)strlen(host), &match);
+    if (proto_id != NDPI_PROTOCOL_UNKNOWN) {
+        const char *name = ndpi_get_proto_name(e->ndpi, proto_id);
+        if (name &&
+            strcmp(name, "Unknown") != 0 &&
+            strcmp(name, "TLS")     != 0 &&
+            strcmp(name, "HTTP")    != 0 &&
+            strcmp(name, "QUIC")    != 0)
+            return name;
+    }
+
+    /* Step 2: single word from SLD. */
+    static char buf[84];
+    strncpy(buf, host, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    size_t len = strlen(buf);
+    if (len > 0 && buf[len - 1] == '.') buf[--len] = '\0';
+    if (len == 0) return host;
+
+    /* Find SLD start (after the second-to-last dot, if any). */
+    const char *sld_start;
+    const char *last = strrchr(buf, '.');
+    if (!last || last == buf) {
+        sld_start = buf;
+    } else {
+        const char *prev = last - 1;
+        while (prev > buf && *prev != '.') prev--;
+        sld_start = (*prev == '.') ? prev + 1 : buf;
+    }
+
+    /* Truncate at the next dot, capitalize first letter to match nDPI style. */
+    static char word[64];
+    const char *end = strchr(sld_start, '.');
+    size_t wlen = end ? (size_t)(end - sld_start) : strlen(sld_start);
+    if (wlen >= sizeof(word)) wlen = sizeof(word) - 1;
+    memcpy(word, sld_start, wlen);
+    word[wlen] = '\0';
+    if (word[0] >= 'a' && word[0] <= 'z') word[0] -= 32;
+    return word;
+}
+
+/* Look up or create a dynamic slot (IDs 400-463) for a hostname.
+ * Groups by registered domain (SLD+TLD) so e.g. all Spotify subdomains
+ * share one "spotify.com" label.
+ * Returns 0 for invalid/local domains or when pool is full. */
+static uint16_t engine_get_dyn_app(ndpi_engine_t *e, const char *host)
+{
+    if (!host || !host[0]) return 0;
+    if (!strchr(host, '.')) return 0;  /* bare name, not a real domain */
+    const char *last_dot = strrchr(host, '.');
+    const char *tld = last_dot ? last_dot + 1 : host;
+    if (strcmp(tld, "local") == 0 || strcmp(tld, "localdomain") == 0) return 0;
+    if (strstr(host, ".arpa") || strstr(host, ".in-addr.")) return 0;  /* reverse DNS */
+
+    /* If nDPI's hostname database knows this host, return the NATIVE proto ID
+     * — keeps category metadata (YouTube → Video, Spotify → Music, etc.) intact.
+     * Only allocate a dynamic slot for truly unknown hosts. */
+    {
+        ndpi_protocol_match_result m;
+        memset(&m, 0, sizeof(m));
+        u_int16_t pid = ndpi_match_string_subprotocol(
+            e->ndpi, (char *)host, (u_int)strlen(host), &m);
+        if (pid != NDPI_PROTOCOL_UNKNOWN) {
+            const char *n = ndpi_get_proto_name(e->ndpi, pid);
+            if (n && strcmp(n, "Unknown") != 0 && strcmp(n, "TLS") != 0 &&
+                strcmp(n, "HTTP") != 0 && strcmp(n, "QUIC") != 0)
+                return pid;
+        }
+    }
+
+    /* Fallback: single-word dynamic label (Phantombuster, Grafana, etc.) */
+    const char *label = clean_label(e, host);
+    for (int i = 0; i < e->dyn_label_count; i++)
+        if (strcmp(e->dyn_labels[i], label) == 0)
+            return (uint16_t)(400 + i);
+    if (e->dyn_label_count >= 64) return 0;
+    strncpy(e->dyn_labels[e->dyn_label_count], label, 63);
+    e->dyn_labels[e->dyn_label_count][63] = '\0';
+    return (uint16_t)(400 + e->dyn_label_count++);
 }
 
 static void on_flow_expire(flow_entry_t *f, void *ctx)
@@ -61,6 +232,13 @@ static void on_flow_expire(flow_entry_t *f, void *ctx)
         e->app_bytes  [f->app_id] += f->bytes;
         e->app_packets[f->app_id] += f->packets;
         e->app_flows  [f->app_id] += 1;
+
+        uint8_t cat = ndpi_engine_category_for(e, f->app_id, f->sni);
+        if (cat < 64) {
+            e->cat_bytes  [cat] += f->bytes;
+            e->cat_packets[cat] += f->packets;
+            e->cat_flows  [cat] += 1;
+        }
     }
 }
 
@@ -207,15 +385,39 @@ void ndpi_engine_process(ndpi_engine_t *e,
                     SNI_MAX_LEN - 1);
 
         {
-            const char *host = f->sni[0] ? f->sni
-                : dns_cache_lookup(&e->dns_cache, k->dst_ip);
+            const char *host;
+            dns_cache_entry_t *dce = NULL;
+            if (f->sni[0]) {
+                host = f->sni;
+            } else {
+                dce  = dns_cache_lookup_entry(&e->dns_cache, k->dst_ip);
+                host = dce ? dce->hostname : NULL;
+            }
             if (host) {
-                uint16_t ai_id = dns_match_app(host);
-                if (ai_id && f->app_id < 512) {
+                uint16_t ai_id;
+                if (dce) {
+                    /* DNS cache path: map to known service name first */
+                    if (dce->cached_app_id) {
+                        ai_id = dce->cached_app_id;
+                    } else {
+                        ai_id = dns_match_app(host);
+                        if (ai_id == 0)
+                            ai_id = engine_get_dyn_app(e, host);
+                        if (ai_id) dce->cached_app_id = ai_id;
+                    }
+                } else {
+                    /* SNI path: use full hostname directly — gives subdomain granularity
+                     * (music.youtube.com, meet.google.com, etc.) without hardcoding */
+                    ai_id = engine_get_dyn_app(e, host);
+                }
+                if (ai_id && ai_id != f->app_id && f->app_id < 512) {
                     e->app_classified_ndpi[f->app_id]--;
                     f->app_id = ai_id;
-                    if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
-                    f->credit_method = 3; /* sni */
+                    if (f->app_id < 512) {
+                        if (dce) e->app_classified_dns[f->app_id]++;
+                        else     e->app_classified_sni[f->app_id]++;
+                    }
+                    f->credit_method = dce ? 5 : 3; /* 5=dns 3=sni */
                 }
             }
         }
@@ -251,15 +453,39 @@ void ndpi_engine_process(ndpi_engine_t *e,
                             SNI_MAX_LEN - 1);
 
                 {
-                    const char *host = f->sni[0] ? f->sni
-                        : dns_cache_lookup(&e->dns_cache, k->dst_ip);
+                    const char *host;
+                    dns_cache_entry_t *dce = NULL;
+                    if (f->sni[0]) {
+                        host = f->sni;
+                    } else {
+                        dce  = dns_cache_lookup_entry(&e->dns_cache, k->dst_ip);
+                        host = dce ? dce->hostname : NULL;
+                    }
                     if (host) {
-                        uint16_t ai_id = dns_match_app(host);
-                        if (ai_id && f->app_id < 512) {
+                        uint16_t ai_id;
+                        if (dce) {
+                            /* DNS cache path: map to known service name first */
+                            if (dce->cached_app_id) {
+                                ai_id = dce->cached_app_id;
+                            } else {
+                                ai_id = dns_match_app(host);
+                                if (ai_id == 0)
+                                    ai_id = engine_get_dyn_app(e, host);
+                                if (ai_id) dce->cached_app_id = ai_id;
+                            }
+                        } else {
+                            /* SNI path: use full hostname directly — gives subdomain
+                             * granularity (music.youtube.com, etc.) without hardcoding */
+                            ai_id = engine_get_dyn_app(e, host);
+                        }
+                        if (ai_id && ai_id != f->app_id && f->app_id < 512) {
                             e->app_classified_giveup[f->app_id]--;
                             f->app_id = ai_id;
-                            if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
-                            f->credit_method = 3; /* sni */
+                            if (f->app_id < 512) {
+                                if (dce) e->app_classified_dns[f->app_id]++;
+                                else     e->app_classified_sni[f->app_id]++;
+                            }
+                            f->credit_method = dce ? 5 : 3; /* 5=dns 3=sni */
                         }
                     }
                 }
@@ -297,21 +523,14 @@ void ndpi_engine_process(ndpi_engine_t *e,
 
                 uint16_t ml_app = ndpi_ml_classify(&feat);
 
-                /* DNS confirmation: when the cache has the destination IP, use the
-                 * hostname to verify or upgrade the ML result.
-                 * - If hostname matches an AI service → upgrade to that specific app.
-                 * - If hostname contradicts the ML class → reject (ml_app = 0),
-                 *   leaving the flow with its existing giveup/SNI classification.
-                 * - If DNS has no entry → trust ML as-is (cache may not be warm yet). */
-                if (ml_app != 0) {
-                    const char *host = dns_cache_lookup(&e->dns_cache, k->dst_ip);
-                    if (host) {
-                        uint16_t ai_id = dns_match_app(host);
-                        if (ai_id)
-                            ml_app = ai_id;  /* DNS gives us more specific AI service */
-                        else if (!ml_dns_confirms(ml_app, host))
-                            ml_app = 0;      /* DNS contradicts ML — reject */
-                    }
+                /* MCP class is special: must resolve to a specific variant via
+                 * SNI/DNS — generic "MCP" without sub-type is dropped. */
+                if (ml_app == NDPI_APP_MCP) {
+                    const char *host = f->sni[0] ? f->sni
+                        : dns_cache_lookup(&e->dns_cache, k->dst_ip);
+                    ml_app = match_mcp_service(host);
+                    if (ml_app == NDPI_APP_MCP)
+                        ml_app = 0;
                 }
 
                 if (ml_app != 0) {
@@ -322,17 +541,13 @@ void ndpi_engine_process(ndpi_engine_t *e,
                                 e->app_classified_giveup[f->app_id]--;
                             else if (f->credit_method == 3)
                                 e->app_classified_sni[f->app_id]--;
+                            else if (f->credit_method == 5)
+                                e->app_classified_dns[f->app_id]--;
                         }
                         e->flows_guessed--;
                     } else {
                         /* ML classifies a truly unknown flow */
                         e->flows_classified++;
-                    }
-                    /* MCP sub-type: SNI first, DNS cache fallback for reused connections */
-                    if (ml_app == NDPI_APP_MCP) {
-                        const char *host = f->sni[0] ? f->sni
-                            : dns_cache_lookup(&e->dns_cache, k->dst_ip);
-                        ml_app = match_mcp_service(host);
                     }
                     f->app_id    = ml_app;
                     f->state     = FLOW_STATE_CLASSIFIED;
@@ -365,6 +580,13 @@ void ndpi_engine_process(ndpi_engine_t *e,
             e->app_bytes  [f->app_id] += f->bytes;
             e->app_packets[f->app_id] += f->packets;
             e->app_flows  [f->app_id] += 1;
+
+            uint8_t cat = ndpi_engine_category_for(e, f->app_id, f->sni);
+            if (cat < 64) {
+                e->cat_bytes  [cat] += f->bytes;
+                e->cat_packets[cat] += f->packets;
+                e->cat_flows  [cat] += 1;
+            }
         }
 
         /* Feature dump for ML retraining (--dump-features). Only write rows
