@@ -228,7 +228,7 @@
       },
       "targets": [{
         "expr": "topk(10, rate(ndpi_observe_app_packets_total{iface=~\"$iface\"}[1m]))",
-        "legendFormat": "{{app}} ({{iface}})"
+        "legendFormat": "{{app}}"
       }]
     },
     {
