@@ -200,6 +200,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
         e->flows_classified++;
         if (f->app_id < 512)
             e->app_classified_ndpi[f->app_id]++;
+        f->credit_method = 1; /* ndpi */
 
         if (f->ndpi_flow->host_server_name[0])
             strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
@@ -214,6 +215,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
                     e->app_classified_ndpi[f->app_id]--;
                     f->app_id = ai_id;
                     if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
+                    f->credit_method = 3; /* sni */
                 }
             }
         }
@@ -242,6 +244,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
                 e->flows_classified++;
                 if (f->app_id < 512)
                     e->app_classified_giveup[f->app_id]++;
+                f->credit_method = 2; /* giveup */
 
                 if (f->ndpi_flow->host_server_name[0])
                     strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
@@ -256,6 +259,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
                             e->app_classified_giveup[f->app_id]--;
                             f->app_id = ai_id;
                             if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
+                            f->credit_method = 3; /* sni */
                         }
                     }
                 }
@@ -294,9 +298,13 @@ void ndpi_engine_process(ndpi_engine_t *e,
                 uint16_t ml_app = ndpi_ml_classify(&feat);
                 if (ml_app != 0) {
                     if (f->state == FLOW_STATE_CLASSIFIED) {
-                        /* ML refines a giveup result: undo the per-app giveup credit */
-                        if (f->app_id < 512)
-                            e->app_classified_giveup[f->app_id]--;
+                        /* ML refines a prior result — undo whichever counter holds the credit */
+                        if (f->app_id < 512) {
+                            if (f->credit_method == 2)
+                                e->app_classified_giveup[f->app_id]--;
+                            else if (f->credit_method == 3)
+                                e->app_classified_sni[f->app_id]--;
+                        }
                         e->flows_guessed--;
                     } else {
                         /* ML classifies a truly unknown flow */
@@ -311,6 +319,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
                     f->app_id    = ml_app;
                     f->state     = FLOW_STATE_CLASSIFIED;
                     f->classified = 1;
+                    f->credit_method = 4; /* ml */
                     e->flows_ml_classified++;
                     if (f->app_id < 512)
                         e->app_classified_ml[f->app_id]++;
