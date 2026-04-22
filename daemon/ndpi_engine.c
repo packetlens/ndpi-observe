@@ -8,6 +8,7 @@
 #include <ndpi/ndpi_api.h>
 #include "ndpi_engine.h"
 #include "ndpi_ml.h"
+#include "ndpi_ai_services.h"
 
 int ndpi_engine_init(ndpi_engine_t *e)
 {
@@ -34,6 +35,8 @@ void ndpi_engine_set_ml(ndpi_engine_t *e, int enabled)
 
 const char *ndpi_engine_app_name(ndpi_engine_t *e, uint16_t app_id)
 {
+    const char *ai = ndpi_ai_app_name(app_id);
+    if (ai) return ai;
     return ndpi_get_proto_name(e->ndpi, app_id);
 }
 
@@ -184,6 +187,15 @@ void ndpi_engine_process(ndpi_engine_t *e,
             strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
                     SNI_MAX_LEN - 1);
 
+        if (f->sni[0]) {
+            uint16_t ai_id = match_ai_service(f->sni);
+            if (ai_id && f->app_id < 512) {
+                e->app_classified_ndpi[f->app_id]--;
+                f->app_id = ai_id;
+                e->app_classified_ndpi[f->app_id]++;
+            }
+        }
+
         ndpi_flow_free(f->ndpi_flow);
         f->ndpi_flow = NULL;
 
@@ -212,6 +224,15 @@ void ndpi_engine_process(ndpi_engine_t *e,
                 if (f->ndpi_flow->host_server_name[0])
                     strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
                             SNI_MAX_LEN - 1);
+
+                if (f->sni[0]) {
+                    uint16_t ai_id = match_ai_service(f->sni);
+                    if (ai_id && f->app_id < 512) {
+                        e->app_classified_giveup[f->app_id]--;
+                        f->app_id = ai_id;
+                        e->app_classified_giveup[f->app_id]++;
+                    }
+                }
             }
 
             /* Step 2: ML model — runs on ALL flows (including giveup-classified ones).
