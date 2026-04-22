@@ -40,6 +40,7 @@ typedef struct {
     uint64_t app_classified_ndpi[512];
     uint64_t app_classified_giveup[512];
     uint64_t app_classified_ml[512];
+    uint64_t app_classified_sni[512];   /* SNI/AI-service rule overrode ndpi/giveup */
 } ndpi_engine_t;
 
 int  ndpi_engine_init(ndpi_engine_t *e);

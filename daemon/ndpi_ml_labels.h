@@ -7,15 +7,14 @@
 
 #include <stdint.h>
 
-#define NDPI_ML_N_CLASSES            5
+#define NDPI_ML_N_CLASSES            4
 #define NDPI_ML_CONFIDENCE_THRESHOLD 0.6f
 
 static const uint16_t ndpi_ml_label_to_proto[NDPI_ML_N_CLASSES] = {
     203,  /* [0] github  */
     124,  /* [1] youtube */
-     74,  /* [2] steam   */
-    189,  /* [3] zoom    */
-    307,  /* [4] mcp     */
+    189,  /* [2] zoom    */
+    307,  /* [3] mcp     */
 };
 
 #endif /* NDPI_ML_LABELS_H */

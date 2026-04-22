@@ -149,7 +149,8 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
         uint64_t n = e->app_classified_ndpi[i];
         uint64_t g = e->app_classified_giveup[i];
         uint64_t m = e->app_classified_ml[i];
-        if (n == 0 && g == 0 && m == 0) continue;
+        uint64_t s = e->app_classified_sni[i];
+        if (n == 0 && g == 0 && m == 0 && s == 0) continue;
         const char *name = ndpi_engine_app_name(e, (uint16_t)i);
         if (n > 0)
             APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"ndpi\"} %lu\n",   iface, name, n);
@@ -157,6 +158,8 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
             APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"giveup\"} %lu\n", iface, name, g);
         if (m > 0)
             APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"ml\"} %lu\n",     iface, name, m);
+        if (s > 0)
+            APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"sni\"} %lu\n",    iface, name, s);
     }
 
     /* Process metrics from /proc/self/stat */

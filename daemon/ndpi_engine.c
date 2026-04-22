@@ -210,7 +210,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
             if (ai_id && f->app_id < 512) {
                 e->app_classified_ndpi[f->app_id]--;
                 f->app_id = ai_id;
-                e->app_classified_ndpi[f->app_id]++;
+                if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
             }
         }
 
@@ -248,7 +248,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
                     if (ai_id && f->app_id < 512) {
                         e->app_classified_giveup[f->app_id]--;
                         f->app_id = ai_id;
-                        e->app_classified_giveup[f->app_id]++;
+                        if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
                     }
                 }
             }
