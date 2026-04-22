@@ -32,9 +32,10 @@ FEATURES = [
 ]
 
 # Must match ndpi_ml_label_to_proto[] index order in ndpi_ml_labels.h:
-#   [0]=Github(203), [1]=Netflix(133), [2]=Steam(74), [3]=Youtube(124),
-#   [4]=Zoom(189), [5]=MCP(307)
-TARGET_CLASSES = ["Github", "Netflix", "Steam", "Youtube", "Zoom", "MCP"]
+#   [0]=Github(203), [1]=YouTube(124), [2]=Steam(74), [3]=Zoom(189), [4]=MCP(307)
+# Note: "YouTube" matches the label returned by ndpi_engine_app_name() for proto 124.
+# Netflix is dropped: zero live-traffic samples collected.
+TARGET_CLASSES = ["Github", "YouTube", "Steam", "Zoom", "MCP"]
 
 OUT_MODEL  = os.path.join(os.path.dirname(__file__), "../daemon/ndpi_ml_model.c")
 OUT_LABELS = os.path.join(os.path.dirname(__file__), "../daemon/ndpi_ml_labels.h")
@@ -49,17 +50,16 @@ LABELS_TEMPLATE = """\
 
 #include <stdint.h>
 
-#define NDPI_ML_N_CLASSES            6
+#define NDPI_ML_N_CLASSES            5
 #define NDPI_ML_CONFIDENCE_THRESHOLD 0.6f
 
-static const uint16_t ndpi_ml_label_to_proto[NDPI_ML_N_CLASSES] = {{
+static const uint16_t ndpi_ml_label_to_proto[NDPI_ML_N_CLASSES] = {
     203,  /* [0] github  */
-    133,  /* [1] netflix */
+    124,  /* [1] youtube */
      74,  /* [2] steam   */
-    124,  /* [3] youtube */
-    189,  /* [4] zoom    */
-    307,  /* [5] mcp     */
-}};
+    189,  /* [3] zoom    */
+    307,  /* [4] mcp     */
+};
 
 #endif /* NDPI_ML_LABELS_H */
 """

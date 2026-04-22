@@ -40,25 +40,32 @@ static void sig_handler(int sig) { (void)sig; g_running = 0; }
 static void usage(const char *prog)
 {
     fprintf(stderr,
-        "Usage: %s -i <interface> [-p <port>] [-s <socket>] [--no-ml]\n"
-        "  -i       Network interface to observe (required)\n"
-        "  -p       Prometheus metrics port (default: %d)\n"
-        "  -s       CLI socket path (default: %s)\n"
-        "  --no-ml  Disable ndpi_detection_giveup + ML fallback\n",
+        "Usage: %s -i <interface> [-p <port>] [-s <socket>] [--no-ml] [--dump-features <file>]\n"
+        "  -i                Network interface to observe (required)\n"
+        "  -p                Prometheus metrics port (default: %d)\n"
+        "  -s                CLI socket path (default: %s)\n"
+        "  --no-ml           Disable ndpi_detection_giveup + ML fallback\n"
+        "  --dump-features   Write per-flow ML feature vectors to CSV for retraining\n",
         prog, SIMPLE_PROM_PORT, SIMPLE_CLI_SOCK_PATH);
 }
 
 int main(int argc, char **argv)
 {
-    const char *ifname    = NULL;
-    int         prom_port = SIMPLE_PROM_PORT;
-    const char *sock_path = SIMPLE_CLI_SOCK_PATH;
-    int         ml_enabled = 1;
+    const char *ifname             = NULL;
+    int         prom_port          = SIMPLE_PROM_PORT;
+    const char *sock_path          = SIMPLE_CLI_SOCK_PATH;
+    int         ml_enabled         = 1;
+    const char *dump_features_path = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--no-ml") == 0) {
             ml_enabled = 0;
             argv[i] = (char *)"";
+        } else if (strcmp(argv[i], "--dump-features") == 0 && i + 1 < argc) {
+            dump_features_path = argv[i + 1];
+            argv[i]     = (char *)"";
+            argv[i + 1] = (char *)"";
+            i++;
         }
     }
 
@@ -122,6 +129,10 @@ int main(int argc, char **argv)
     snprintf(engine.iface, sizeof(engine.iface), "%s", ifname);
     if (!ml_enabled)
         fprintf(stderr, "ndpid-simple: ML/giveup disabled (--no-ml)\n");
+    if (dump_features_path) {
+        ndpi_engine_set_dump_features(&engine, dump_features_path);
+        fprintf(stderr, "ndpid-simple: dumping ML features to %s\n", dump_features_path);
+    }
 
     /* ── CLI Unix socket ─────────────────────────────────────────────── */
     int cli_fd = unix_socket_init(sock_path);

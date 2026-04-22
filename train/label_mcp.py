@@ -17,7 +17,8 @@ import csv
 
 IAT_MAX_THRESHOLD  = 2.0    # seconds between packets
 DURATION_THRESHOLD = 5.0    # minimum flow lifetime
-MCP_APPS = {"Claude", "Github", "Cloudflare", "ChatGPT", "Copilot"}
+# TLS: Claude/Anthropic API SSE connections that nDPI can't identify (encrypted)
+MCP_APPS = {"Claude", "Github", "Cloudflare", "ChatGPT", "Copilot", "TLS"}
 
 def label_row(row):
     try:

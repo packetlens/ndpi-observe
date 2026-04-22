@@ -310,9 +310,11 @@ void ndpi_engine_process(ndpi_engine_t *e,
         f->ndpi_flow = NULL;
     }
 
-    if (got_verdict && verdict_map_fd >= 0) {
-        __u16 app_id = (__u16)f->app_id;
-        bpf_map_update_elem(verdict_map_fd, k, &app_id, BPF_ANY);
+    if (got_verdict) {
+        if (verdict_map_fd >= 0) {
+            __u16 app_id = (__u16)f->app_id;
+            bpf_map_update_elem(verdict_map_fd, k, &app_id, BPF_ANY);
+        }
 
         if (f->app_id < 512) {
             e->app_bytes  [f->app_id] += f->bytes;
