@@ -152,7 +152,7 @@
     {
       "id": 23,
       "title": "Classification Method by App",
-      "description": "How each application's flows were identified: nDPI DPI signatures, giveup (port/heuristic fallback after 8 pkts), or ML model",
+      "description": "How each application's flows were identified: nDPI DPI signatures, giveup (port/heuristic fallback after 8 pkts), ML model, or SNI hostname rules",
       "type": "bargauge",
       "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10},
       "targets": [
@@ -163,6 +163,10 @@
         {
           "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"ml\"})",
           "legendFormat": "{{app}} — ML"
+        },
+        {
+          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"sni\"})",
+          "legendFormat": "{{app}} — SNI"
         }
       ],
       "options": {
@@ -175,7 +179,9 @@
           {"matcher": {"id": "byFrameRefID", "options": "A"},
            "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
           {"matcher": {"id": "byFrameRefID", "options": "B"},
-           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]}
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byFrameRefID", "options": "C"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]}
         ]
       }
     },

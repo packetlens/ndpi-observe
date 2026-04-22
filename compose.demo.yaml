@@ -17,6 +17,9 @@ services:
       - ./labs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9092:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-admin-api"
     restart: unless-stopped
 
   grafana:
