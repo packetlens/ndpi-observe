@@ -162,14 +162,19 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
             APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"sni\"} %lu\n",    iface, name, s);
     }
 
-    /* DNS cache occupancy */
+    /* DNS cache — occupancy summary + per-entry labeled metrics */
     {
         int occupied = 0;
         uint32_t now = (uint32_t)time(NULL);
+        APPEND("# HELP ndpi_observe_dns_cache_entry TTL remaining for each IP→hostname entry\n");
+        APPEND("# TYPE ndpi_observe_dns_cache_entry gauge\n");
         for (int i = 0; i < DNS_CACHE_SIZE; i++) {
-            if (e->dns_cache.entries[i].ip && e->dns_cache.entries[i].hostname[0]
-                    && now < e->dns_cache.entries[i].expires)
-                occupied++;
+            dns_cache_entry_t *ce = &e->dns_cache.entries[i];
+            if (!ce->ip || !ce->hostname[0] || now >= ce->expires) continue;
+            occupied++;
+            uint8_t *b = (uint8_t *)&ce->ip;
+            APPEND("ndpi_observe_dns_cache_entry{iface=\"%s\",ip=\"%u.%u.%u.%u\",hostname=\"%s\"} %u\n",
+                   iface, b[0], b[1], b[2], b[3], ce->hostname, ce->expires - now);
         }
         APPEND("# HELP ndpi_observe_dns_cache_entries Active entries in the IP→hostname DNS cache\n");
         APPEND("# TYPE ndpi_observe_dns_cache_entries gauge\n");

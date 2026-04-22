@@ -264,11 +264,49 @@
       }]
     },
     {
+      "id": 15,
+      "title": "DNS Cache Entries",
+      "description": "All active IP→hostname mappings observed from DNS A responses. TTL = seconds until expiry.",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 50, "w": 12, "h": 10},
+      "options": {
+        "sortBy": [{"displayName": "hostname", "desc": false}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {"custom": {"filterable": true}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "ip"},
+           "properties": [{"id": "displayName", "value": "IP"}]},
+          {"matcher": {"id": "byName", "options": "hostname"},
+           "properties": [{"id": "displayName", "value": "Hostname"}]},
+          {"matcher": {"id": "byName", "options": "Value"},
+           "properties": [{"id": "displayName", "value": "TTL (s)"},
+                          {"id": "unit", "value": "s"},
+                          {"id": "custom.width", "value": 80}]},
+          {"matcher": {"id": "byName", "options": "iface"},
+           "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "Time"},
+           "properties": [{"id": "custom.hidden", "value": true}]}
+        ]
+      },
+      "targets": [{
+        "expr": "ndpi_observe_dns_cache_entry{iface=~\"$iface\"}",
+        "legendFormat": "",
+        "instant": true,
+        "format": "table"
+      }],
+      "transformations": [
+        {"id": "filterFieldsByName", "options": {"include": {"names": ["ip","hostname","Value","iface","Time"]}}},
+        {"id": "sortBy", "options": {"fields": [{"displayName": "hostname", "desc": false}]}}
+      ]
+    },
+    {
       "id": 14,
       "title": "DNS Cache Occupancy",
       "description": "Active IP→hostname entries in the passive DNS cache (populated from observed DNS A responses). Used for flow classification confirmation.",
       "type": "timeseries",
-      "gridPos": {"x": 0, "y": 50, "w": 12, "h": 8},
+      "gridPos": {"x": 12, "y": 50, "w": 12, "h": 10},
       "fieldConfig": {
         "defaults": {
           "unit": "short",
