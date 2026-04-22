@@ -70,6 +70,10 @@ void ndpi_engine_process(ndpi_engine_t *e,
 {
     const struct ndpi_obs_flow_key *k = &evt->key;
 
+    /* Opportunistically cache IP→hostname from DNS responses (src_port=53, UDP) */
+    if (k->proto == IPPROTO_UDP && ntohs(k->src_port) == 53)
+        dns_cache_update(&e->dns_cache, evt->pkt_data, evt->data_len);
+
     flow_entry_t *f = flow_table_get_or_create(&e->flows, k);
     if (!f)
         return;
@@ -289,6 +293,12 @@ void ndpi_engine_process(ndpi_engine_t *e,
                     } else {
                         /* ML classifies a truly unknown flow */
                         e->flows_classified++;
+                    }
+                    /* MCP sub-type: SNI first, DNS cache fallback for reused connections */
+                    if (ml_app == NDPI_APP_MCP) {
+                        const char *host = f->sni[0] ? f->sni
+                            : dns_cache_lookup(&e->dns_cache, k->dst_ip);
+                        ml_app = match_mcp_service(host);
                     }
                     f->app_id    = ml_app;
                     f->state     = FLOW_STATE_CLASSIFIED;

@@ -17,21 +17,61 @@
 #define NDPI_APP_GROK        305
 #define NDPI_APP_MISTRAL     306
 /* MCP: Model Context Protocol over SSE — detected by ML traffic shape, not SNI */
-#define NDPI_APP_MCP         307
+#define NDPI_APP_MCP            307
+/* MCP sub-types: ML detects SSE pattern, SNI identifies the specific service */
+#define NDPI_APP_GITHUB_MCP     308  /* api.github.com / api.githubcopilot.com */
+#define NDPI_APP_CLAUDE_MCP     309  /* api.anthropic.com / claude.ai           */
+#define NDPI_APP_ASANA_MCP      310  /* mcp.asana.com                           */
+#define NDPI_APP_GITLAB_MCP     311  /* gitlab.com                              */
+#define NDPI_APP_LINEAR_MCP     312  /* mcp.linear.app                          */
+#define NDPI_APP_GREPTILE_MCP   313  /* api.greptile.com                        */
+#define NDPI_APP_MEDIUM_MCP     314  /* api.medium.com                          */
+#define NDPI_APP_CLOUDFLARE_MCP 315  /* cloudflare.com (Workers AI/Cloudflare)  */
 
 static inline const char *ndpi_ai_app_name(uint16_t id)
 {
     switch (id) {
-        case NDPI_APP_CLAUDE:     return "Claude";
-        case NDPI_APP_CHATGPT:    return "ChatGPT";
-        case NDPI_APP_GEMINI:     return "Gemini";
-        case NDPI_APP_COPILOT:    return "Copilot";
-        case NDPI_APP_PERPLEXITY: return "Perplexity";
-        case NDPI_APP_GROK:       return "Grok";
-        case NDPI_APP_MISTRAL:    return "Mistral";
-        case NDPI_APP_MCP:        return "MCP";
-        default:                  return NULL;
+        case NDPI_APP_CLAUDE:         return "Claude";
+        case NDPI_APP_CHATGPT:        return "ChatGPT";
+        case NDPI_APP_GEMINI:         return "Gemini";
+        case NDPI_APP_COPILOT:        return "Copilot";
+        case NDPI_APP_PERPLEXITY:     return "Perplexity";
+        case NDPI_APP_GROK:           return "Grok";
+        case NDPI_APP_MISTRAL:        return "Mistral";
+        case NDPI_APP_MCP:            return "MCP";
+        case NDPI_APP_GITHUB_MCP:     return "Github_MCP";
+        case NDPI_APP_CLAUDE_MCP:     return "Claude_MCP";
+        case NDPI_APP_ASANA_MCP:      return "Asana_MCP";
+        case NDPI_APP_GITLAB_MCP:     return "Gitlab_MCP";
+        case NDPI_APP_LINEAR_MCP:     return "Linear_MCP";
+        case NDPI_APP_GREPTILE_MCP:   return "Greptile_MCP";
+        case NDPI_APP_MEDIUM_MCP:     return "Medium_MCP";
+        case NDPI_APP_CLOUDFLARE_MCP: return "Cloudflare_MCP";
+        default:                       return NULL;
     }
+}
+
+/* Called when ML decides a flow is MCP — map SNI to the specific service. */
+static inline uint16_t match_mcp_service(const char *sni)
+{
+    if (!sni || !sni[0]) return NDPI_APP_MCP;
+    static const struct { const char *domain; uint16_t id; } t[] = {
+        { "github.com",         NDPI_APP_GITHUB_MCP     },
+        { "githubcopilot.com",  NDPI_APP_GITHUB_MCP     },
+        { "anthropic.com",      NDPI_APP_CLAUDE_MCP     },
+        { "claude.ai",          NDPI_APP_CLAUDE_MCP     },
+        { "asana.com",          NDPI_APP_ASANA_MCP      },
+        { "gitlab.com",         NDPI_APP_GITLAB_MCP     },
+        { "linear.app",         NDPI_APP_LINEAR_MCP     },
+        { "greptile.com",       NDPI_APP_GREPTILE_MCP   },
+        { "medium.com",         NDPI_APP_MEDIUM_MCP     },
+        { "cloudflare.com",     NDPI_APP_CLOUDFLARE_MCP },
+        { NULL, 0 }
+    };
+    for (int i = 0; t[i].domain; i++)
+        if (strstr(sni, t[i].domain))
+            return t[i].id;
+    return NDPI_APP_MCP;
 }
 
 static inline uint16_t match_ai_service(const char *sni)

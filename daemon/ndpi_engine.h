@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "flow_table.h"
+#include "ndpi_dns_cache.h"
 
 typedef struct ndpi_detection_module_struct ndpi_mod_t;
 
@@ -22,6 +23,8 @@ typedef struct {
     uint64_t flows_gave_up;
 
     int ml_enabled;  /* 1 = giveup+ML active (default); 0 = --no-ml */
+
+    dns_cache_t dns_cache;  /* IP→hostname from observed DNS A responses */
 
     FILE *dump_features_fp;  /* non-NULL when --dump-features is active */
 
