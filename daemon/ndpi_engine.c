@@ -33,6 +33,20 @@ void ndpi_engine_set_ml(ndpi_engine_t *e, int enabled)
     e->ml_enabled = enabled;
 }
 
+void ndpi_engine_set_dump_features(ndpi_engine_t *e, const char *path)
+{
+    e->dump_features_fp = fopen(path, "w");
+    if (!e->dump_features_fp) {
+        fprintf(stderr, "ndpid: warning: cannot open feature dump file %s\n", path);
+        return;
+    }
+    fprintf(e->dump_features_fp,
+        "label,pkt_len_mean,pkt_len_std,pkt_len_min,pkt_len_max,pkt_len_total,"
+        "iat_mean_s,iat_std_s,iat_min_s,iat_max_s,duration_s,n_pkts,"
+        "proto,dport,first_pkt_len,last_pkt_len\n");
+    fflush(e->dump_features_fp);
+}
+
 const char *ndpi_engine_app_name(ndpi_engine_t *e, uint16_t app_id)
 {
     const char *ai = ndpi_ai_app_name(app_id);
@@ -305,6 +319,38 @@ void ndpi_engine_process(ndpi_engine_t *e,
             e->app_packets[f->app_id] += f->packets;
             e->app_flows  [f->app_id] += 1;
         }
+
+        /* Feature dump for ML retraining (--dump-features). Only write rows
+         * where we have enough packets to compute meaningful statistics. */
+        if (e->dump_features_fp && f->ml_n_pkts > 0) {
+            float n        = (float)f->ml_n_pkts;
+            float iat_n    = (n > 1.0f) ? (n - 1.0f) : 1.0f;
+            float pkt_mean = f->ml_pkt_sum / n;
+            float iat_mean = f->ml_iat_sum / iat_n;
+            float pkt_var  = (f->ml_pkt_sq / n) - pkt_mean * pkt_mean;
+            float iat_var  = (n > 2.0f)
+                ? ((f->ml_iat_sq / iat_n) - iat_mean * iat_mean) : 0.0f;
+            float pkt_std  = (pkt_var > 0.0f) ? sqrtf(pkt_var) : 0.0f;
+            float iat_std  = (iat_var > 0.0f) ? sqrtf(iat_var) : 0.0f;
+            float iat_min  = (n > 1.0f) ? f->ml_iat_min : 0.0f;
+            float duration = (float)(f->last_seen - f->first_seen);
+
+            const char *label = ndpi_engine_app_name(e, f->app_id);
+            if (!label || label[0] == '\0') label = "unknown";
+
+            fprintf(e->dump_features_fp,
+                "%s,%.4f,%.4f,%.4f,%.4f,%.4f,"
+                "%.6f,%.6f,%.6f,%.6f,%.4f,%.0f,"
+                "%.0f,%.0f,%.4f,%.4f\n",
+                label,
+                pkt_mean, pkt_std,
+                (float)f->ml_pkt_min, (float)f->ml_pkt_max, f->ml_pkt_sum,
+                iat_mean, iat_std, iat_min, f->ml_iat_max,
+                duration, n,
+                (float)k->proto, (float)ntohs(k->dst_port),
+                (float)f->ml_first_pkt, (float)f->ml_last_pkt);
+            fflush(e->dump_features_fp);
+        }
     }
 }
 
@@ -320,5 +366,9 @@ void ndpi_engine_destroy(ndpi_engine_t *e)
     if (e->ndpi) {
         ndpi_exit_detection_module(e->ndpi);
         e->ndpi = NULL;
+    }
+    if (e->dump_features_fp) {
+        fclose(e->dump_features_fp);
+        e->dump_features_fp = NULL;
     }
 }

@@ -3,6 +3,7 @@
 #define NDPI_ENGINE_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include "flow_table.h"
 
 typedef struct ndpi_detection_module_struct ndpi_mod_t;
@@ -22,6 +23,8 @@ typedef struct {
 
     int ml_enabled;  /* 1 = giveup+ML active (default); 0 = --no-ml */
 
+    FILE *dump_features_fp;  /* non-NULL when --dump-features is active */
+
     char iface[64];  /* interface name for metric labels */
 
     /* Per-app aggregated counters (app_id → totals across all flows) */
@@ -38,6 +41,7 @@ typedef struct {
 
 int  ndpi_engine_init(ndpi_engine_t *e);
 void ndpi_engine_set_ml(ndpi_engine_t *e, int enabled);
+void ndpi_engine_set_dump_features(ndpi_engine_t *e, const char *path);
 void ndpi_engine_process(ndpi_engine_t *e,
                          const struct ndpi_obs_flow_event *evt,
                          int verdict_map_fd);

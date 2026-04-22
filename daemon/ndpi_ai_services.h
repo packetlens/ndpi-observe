@@ -16,6 +16,8 @@
 #define NDPI_APP_PERPLEXITY  304
 #define NDPI_APP_GROK        305
 #define NDPI_APP_MISTRAL     306
+/* MCP: Model Context Protocol over SSE — detected by ML traffic shape, not SNI */
+#define NDPI_APP_MCP         307
 
 static inline const char *ndpi_ai_app_name(uint16_t id)
 {
@@ -27,6 +29,7 @@ static inline const char *ndpi_ai_app_name(uint16_t id)
         case NDPI_APP_PERPLEXITY: return "Perplexity";
         case NDPI_APP_GROK:       return "Grok";
         case NDPI_APP_MISTRAL:    return "Mistral";
+        case NDPI_APP_MCP:        return "MCP";
         default:                  return NULL;
     }
 }
