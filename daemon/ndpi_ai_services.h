@@ -98,4 +98,28 @@ static inline uint16_t match_ai_service(const char *sni)
     return 0;
 }
 
+/* Per-class DNS confirmation domains for ML results.
+ * Returns 1 if the hostname is consistent with the ML-classified app_id.
+ * Only called when the DNS cache has an entry — absence means "unconfirmed, keep ML". */
+static inline int ml_dns_confirms(uint16_t app_id, const char *host)
+{
+    static const struct { uint16_t id; const char *domain; } t[] = {
+        { 124, "youtube.com"          },
+        { 124, "googlevideo.com"      },
+        { 124, "ytimg.com"            },
+        { 203, "github.com"           },
+        { 203, "githubusercontent.com" },
+        { 203, "githubcopilot.com"    },
+        { 189, "zoom.us"              },
+        { 189, "zoom.com"             },
+        { 0, NULL }
+    };
+    /* MCP sub-types: match_mcp_service() already handles refinement */
+    if (app_id == 307) return 1;
+    for (int i = 0; t[i].domain; i++)
+        if (t[i].id == app_id && strstr(host, t[i].domain))
+            return 1;
+    return 0;
+}
+
 #endif /* NDPI_AI_SERVICES_H */

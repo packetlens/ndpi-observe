@@ -296,6 +296,24 @@ void ndpi_engine_process(ndpi_engine_t *e,
                 feat.last_pkt_len  = (float)f->ml_last_pkt;
 
                 uint16_t ml_app = ndpi_ml_classify(&feat);
+
+                /* DNS confirmation: when the cache has the destination IP, use the
+                 * hostname to verify or upgrade the ML result.
+                 * - If hostname matches an AI service → upgrade to that specific app.
+                 * - If hostname contradicts the ML class → reject (ml_app = 0),
+                 *   leaving the flow with its existing giveup/SNI classification.
+                 * - If DNS has no entry → trust ML as-is (cache may not be warm yet). */
+                if (ml_app != 0) {
+                    const char *host = dns_cache_lookup(&e->dns_cache, k->dst_ip);
+                    if (host) {
+                        uint16_t ai_id = match_ai_service(host);
+                        if (ai_id)
+                            ml_app = ai_id;  /* DNS gives us more specific AI service */
+                        else if (!ml_dns_confirms(ml_app, host))
+                            ml_app = 0;      /* DNS contradicts ML — reject */
+                    }
+                }
+
                 if (ml_app != 0) {
                     if (f->state == FLOW_STATE_CLASSIFIED) {
                         /* ML refines a prior result — undo whichever counter holds the credit */
