@@ -205,12 +205,16 @@ void ndpi_engine_process(ndpi_engine_t *e,
             strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
                     SNI_MAX_LEN - 1);
 
-        if (f->sni[0]) {
-            uint16_t ai_id = match_ai_service(f->sni);
-            if (ai_id && f->app_id < 512) {
-                e->app_classified_ndpi[f->app_id]--;
-                f->app_id = ai_id;
-                if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
+        {
+            const char *host = f->sni[0] ? f->sni
+                : dns_cache_lookup(&e->dns_cache, k->dst_ip);
+            if (host) {
+                uint16_t ai_id = match_ai_service(host);
+                if (ai_id && f->app_id < 512) {
+                    e->app_classified_ndpi[f->app_id]--;
+                    f->app_id = ai_id;
+                    if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
+                }
             }
         }
 
@@ -243,12 +247,16 @@ void ndpi_engine_process(ndpi_engine_t *e,
                     strncpy(f->sni, (char *)f->ndpi_flow->host_server_name,
                             SNI_MAX_LEN - 1);
 
-                if (f->sni[0]) {
-                    uint16_t ai_id = match_ai_service(f->sni);
-                    if (ai_id && f->app_id < 512) {
-                        e->app_classified_giveup[f->app_id]--;
-                        f->app_id = ai_id;
-                        if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
+                {
+                    const char *host = f->sni[0] ? f->sni
+                        : dns_cache_lookup(&e->dns_cache, k->dst_ip);
+                    if (host) {
+                        uint16_t ai_id = match_ai_service(host);
+                        if (ai_id && f->app_id < 512) {
+                            e->app_classified_giveup[f->app_id]--;
+                            f->app_id = ai_id;
+                            if (f->app_id < 512) e->app_classified_sni[f->app_id]++;
+                        }
                     }
                 }
             }
