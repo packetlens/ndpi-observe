@@ -262,6 +262,35 @@
         "expr": "sum(process_resident_memory_bytes{job=\"ndpi-observe\",iface=~\"$iface\"})",
         "legendFormat": "RSS ({{iface}})"
       }]
+    },
+    {
+      "id": 14,
+      "title": "DNS Cache Occupancy",
+      "description": "Active IP→hostname entries in the passive DNS cache (populated from observed DNS A responses). Used for flow classification confirmation.",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 50, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 2, "fillOpacity": 15},
+          "min": 0
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "capacity"},
+           "properties": [{"id": "custom.lineStyle", "value": {"fill": "dash"}},
+                          {"id": "color", "value": {"mode": "fixed", "fixedColor": "gray"}}]}
+        ]
+      },
+      "targets": [
+        {
+          "expr": "ndpi_observe_dns_cache_entries{iface=~\"$iface\"}",
+          "legendFormat": "entries"
+        },
+        {
+          "expr": "ndpi_observe_dns_cache_size{iface=~\"$iface\"}",
+          "legendFormat": "capacity"
+        }
+      ]
     }
   ]
 }

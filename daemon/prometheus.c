@@ -162,6 +162,23 @@ static void write_metrics(int cfd, ndpi_engine_t *e, int app_cnt_fd)
             APPEND("ndpi_observe_app_classified_total{iface=\"%s\",app=\"%s\",method=\"sni\"} %lu\n",    iface, name, s);
     }
 
+    /* DNS cache occupancy */
+    {
+        int occupied = 0;
+        uint32_t now = (uint32_t)time(NULL);
+        for (int i = 0; i < DNS_CACHE_SIZE; i++) {
+            if (e->dns_cache.entries[i].ip && e->dns_cache.entries[i].hostname[0]
+                    && now < e->dns_cache.entries[i].expires)
+                occupied++;
+        }
+        APPEND("# HELP ndpi_observe_dns_cache_entries Active entries in the IP→hostname DNS cache\n");
+        APPEND("# TYPE ndpi_observe_dns_cache_entries gauge\n");
+        APPEND("ndpi_observe_dns_cache_entries{iface=\"%s\"} %d\n", iface, occupied);
+        APPEND("# HELP ndpi_observe_dns_cache_size Total slots in the DNS cache\n");
+        APPEND("# TYPE ndpi_observe_dns_cache_size gauge\n");
+        APPEND("ndpi_observe_dns_cache_size{iface=\"%s\"} %d\n", iface, DNS_CACHE_SIZE);
+    }
+
     /* Process metrics from /proc/self/stat */
     {
         FILE *f = fopen("/proc/self/stat", "r");

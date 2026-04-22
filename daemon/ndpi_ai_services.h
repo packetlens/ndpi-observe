@@ -98,28 +98,40 @@ static inline uint16_t match_ai_service(const char *sni)
     return 0;
 }
 
-/* Per-class DNS confirmation domains for ML results.
+/* Map any known hostname to an app_id — superset of match_ai_service() that also
+ * covers well-known non-AI apps (YouTube, Github, Zoom) by their CDN domains.
+ * Used for DNS-based upgrade/confirmation in nDPI, giveup, and ML paths. */
+static inline uint16_t dns_match_app(const char *host)
+{
+    /* AI services first */
+    uint16_t ai = match_ai_service(host);
+    if (ai) return ai;
+
+    /* Well-known app CDN/API domains */
+    static const struct { const char *domain; uint16_t id; } t[] = {
+        { "youtube.com",           124 },
+        { "googlevideo.com",       124 },
+        { "ytimg.com",             124 },
+        { "github.com",            203 },
+        { "githubusercontent.com", 203 },
+        { "githubcopilot.com",     203 },
+        { "zoom.us",               189 },
+        { "zoom.com",              189 },
+        { NULL, 0 }
+    };
+    for (int i = 0; t[i].domain; i++)
+        if (strstr(host, t[i].domain))
+            return t[i].id;
+    return 0;
+}
+
+/* Per-class DNS confirmation for ML results.
  * Returns 1 if the hostname is consistent with the ML-classified app_id.
- * Only called when the DNS cache has an entry — absence means "unconfirmed, keep ML". */
+ * Absence of a DNS entry means "unconfirmed — keep ML result". */
 static inline int ml_dns_confirms(uint16_t app_id, const char *host)
 {
-    static const struct { uint16_t id; const char *domain; } t[] = {
-        { 124, "youtube.com"          },
-        { 124, "googlevideo.com"      },
-        { 124, "ytimg.com"            },
-        { 203, "github.com"           },
-        { 203, "githubusercontent.com" },
-        { 203, "githubcopilot.com"    },
-        { 189, "zoom.us"              },
-        { 189, "zoom.com"             },
-        { 0, NULL }
-    };
-    /* MCP sub-types: match_mcp_service() already handles refinement */
-    if (app_id == 307) return 1;
-    for (int i = 0; t[i].domain; i++)
-        if (t[i].id == app_id && strstr(host, t[i].domain))
-            return 1;
-    return 0;
+    if (app_id == 307) return 1;  /* MCP: match_mcp_service() handles sub-typing */
+    return dns_match_app(host) == app_id;
 }
 
 #endif /* NDPI_AI_SERVICES_H */

@@ -210,7 +210,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
             const char *host = f->sni[0] ? f->sni
                 : dns_cache_lookup(&e->dns_cache, k->dst_ip);
             if (host) {
-                uint16_t ai_id = match_ai_service(host);
+                uint16_t ai_id = dns_match_app(host);
                 if (ai_id && f->app_id < 512) {
                     e->app_classified_ndpi[f->app_id]--;
                     f->app_id = ai_id;
@@ -254,7 +254,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
                     const char *host = f->sni[0] ? f->sni
                         : dns_cache_lookup(&e->dns_cache, k->dst_ip);
                     if (host) {
-                        uint16_t ai_id = match_ai_service(host);
+                        uint16_t ai_id = dns_match_app(host);
                         if (ai_id && f->app_id < 512) {
                             e->app_classified_giveup[f->app_id]--;
                             f->app_id = ai_id;
@@ -306,7 +306,7 @@ void ndpi_engine_process(ndpi_engine_t *e,
                 if (ml_app != 0) {
                     const char *host = dns_cache_lookup(&e->dns_cache, k->dst_ip);
                     if (host) {
-                        uint16_t ai_id = match_ai_service(host);
+                        uint16_t ai_id = dns_match_app(host);
                         if (ai_id)
                             ml_app = ai_id;  /* DNS gives us more specific AI service */
                         else if (!ml_dns_confirms(ml_app, host))
