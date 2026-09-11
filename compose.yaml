@@ -1,0 +1,43 @@
+services:
+  base:
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+    image: ndpi-observe-base
+
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        BASE_IMAGE: ndpi-observe-base
+    image: ndpi-observe-dev
+    volumes:
+      - .:/src
+    working_dir: /src
+    privileged: true
+    network_mode: host
+    stdin_open: true
+    tty: true
+    command: bash
+
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        BASE_IMAGE: ndpi-observe-base
+    volumes:
+      - .:/src
+    working_dir: /src
+    command: scripts/build-daemon.sh
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.ci
+      args:
+        BASE_IMAGE: ndpi-observe-base
+    privileged: true
+    network_mode: host
+    command: scripts/run-tests.sh
