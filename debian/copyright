@@ -1,0 +1,25 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: ndpi-observe
+Upstream-Contact: PacketFlow <garyachy@gmail.com>
+Source: https://github.com/packetlens/ndpi-observe
+
+Files: *
+Copyright: 2026 PacketFlow
+License: Apache-2.0
+
+Files: bpf/*
+Copyright: 2026 PacketFlow
+License: GPL-2.0
+
+License: Apache-2.0
+ Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ use this file except in compliance with the License.
+ On Debian systems, the full text of the Apache License, Version 2.0 can be
+ found in the file `/usr/share/common-licenses/Apache-2.0'.
+
+License: GPL-2.0
+ This program is free software; you can redistribute it and/or modify it
+ under the terms of the GNU General Public License as published by the Free
+ Software Foundation; version 2.
+ On Debian systems, the full text of the GNU General Public License version 2
+ can be found in the file `/usr/share/common-licenses/GPL-2'.

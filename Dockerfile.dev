@@ -1,0 +1,8 @@
+ARG BASE_IMAGE=ndpi-observe-base
+FROM ${BASE_IMAGE}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gdb strace vim less \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src

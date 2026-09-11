@@ -1,0 +1,411 @@
+{
+  "title": "ndpi-observe",
+  "uid": "ndpi-observe",
+  "schemaVersion": 38,
+  "version": 3,
+  "refresh": "10s",
+  "templating": {
+    "list": [
+      {
+        "name": "iface",
+        "type": "query",
+        "label": "Interface",
+        "query": "label_values(ndpi_observe_info, iface)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 20,
+      "title": "Interface",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 0, "w": 3, "h": 4},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "textMode": "name"},
+      "targets": [{
+        "expr": "ndpi_observe_info{iface=~\"$iface\"}",
+        "legendFormat": "{{iface}}"
+      }]
+    },
+    {
+      "id": 1,
+      "title": "Active Flows",
+      "type": "stat",
+      "gridPos": {"x": 3, "y": 0, "w": 3, "h": 4},
+      "targets": [{
+        "expr": "sum(ndpi_observe_flows_active{iface=~\"$iface\"})",
+        "legendFormat": "active"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "Flows Created",
+      "type": "stat",
+      "gridPos": {"x": 6, "y": 0, "w": 3, "h": 4},
+      "targets": [{
+        "expr": "sum(ndpi_observe_flows_created_total{iface=~\"$iface\"})",
+        "legendFormat": "created"
+      }]
+    },
+    {
+      "id": 21,
+      "title": "% Unknown",
+      "type": "stat",
+      "gridPos": {"x": 9, "y": 0, "w": 3, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 15}
+            ]
+          }
+        }
+      },
+      "targets": [{
+        "expr": "100 * sum(ndpi_observe_flows_gave_up_total{iface=~\"$iface\"}) / clamp_min(sum(ndpi_observe_flows_created_total{iface=~\"$iface\"}), 1)",
+        "legendFormat": "unknown %"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Total Throughput",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"steps": [{"color": "green", "value": null}]}
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(ndpi_observe_app_bytes_total{iface=~\"$iface\"}[1m])) * 8",
+        "legendFormat": "bps"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "Total Packet Rate",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "color": {"mode": "thresholds"},
+          "thresholds": {"steps": [{"color": "green", "value": null}]}
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(ndpi_observe_app_packets_total{iface=~\"$iface\"}[1m]))",
+        "legendFormat": "pps"
+      }]
+    },
+    {
+      "id": 22,
+      "title": "Classification Breakdown",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 2, "fillOpacity": 10}
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(ndpi_observe_flows_classified_total{iface=~\"$iface\"}[1m])) - sum(rate(ndpi_observe_flows_ml_total{iface=~\"$iface\"}[1m]))",
+          "legendFormat": "nDPI"
+        },
+        {
+          "expr": "sum(rate(ndpi_observe_flows_ml_total{iface=~\"$iface\"}[1m]))",
+          "legendFormat": "ML"
+        },
+        {
+          "expr": "sum(rate(ndpi_observe_flows_gave_up_total{iface=~\"$iface\"}[1m]))",
+          "legendFormat": "unknown"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Packets Scanned vs Fast-Path",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(ndpi_observe_packets_scanned_total{iface=~\"$iface\"}[1m]))",
+          "legendFormat": "scanned/s ({{iface}})"
+        },
+        {
+          "expr": "sum(rate(ndpi_observe_packets_fastpath_total{iface=~\"$iface\"}[1m]))",
+          "legendFormat": "fastpath/s — in-kernel ({{iface}})"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Classification Method by App",
+      "description": "How each application's flows were identified: nDPI DPI signatures, giveup (port/heuristic fallback after 8 pkts), ML model, SNI (TLS ClientHello), or DNS (passive DNS cache)",
+      "type": "bargauge",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 10},
+      "targets": [
+        {
+          "expr": "topk(20, sum by (iface, app) (ndpi_observe_app_classified_total{iface=~\"$iface\", method=~\"ndpi|giveup\"}))",
+          "legendFormat": "{{app}} — nDPI"
+        },
+        {
+          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"ml\"})",
+          "legendFormat": "{{app}} — ML"
+        },
+        {
+          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"sni\"})",
+          "legendFormat": "{{app}} — SNI"
+        },
+        {
+          "expr": "topk(20, ndpi_observe_app_classified_total{iface=~\"$iface\", method=\"dns\"})",
+          "legendFormat": "{{app}} — DNS"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["lastNotNull"]},
+        "groupWidth": 0.7
+      },
+      "fieldConfig": {
+        "overrides": [
+          {"matcher": {"id": "byFrameRefID", "options": "A"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]},
+          {"matcher": {"id": "byFrameRefID", "options": "B"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byFrameRefID", "options": "C"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}]},
+          {"matcher": {"id": "byFrameRefID", "options": "D"},
+           "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "purple"}}]}
+        ]
+      }
+    },
+    {
+      "id": 30,
+      "title": "Traffic Type — Bytes Share",
+      "description": "Percentage of total bytes per traffic category (nDPI category enum)",
+      "type": "piechart",
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 10},
+      "targets": [{
+        "expr": "sum by (category) (ndpi_observe_category_bytes_total{iface=~\"$iface\"})",
+        "legendFormat": "{{category}}"
+      }],
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"],
+        "legend": {"displayMode": "list", "placement": "right", "values": ["percent"]},
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
+      }
+    },
+    {
+      "id": 31,
+      "title": "Traffic Type — Flows Share",
+      "description": "Percentage of total flows per traffic category",
+      "type": "piechart",
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 10},
+      "targets": [{
+        "expr": "sum by (category) (ndpi_observe_category_flows_total{iface=~\"$iface\"})",
+        "legendFormat": "{{category}}"
+      }],
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"],
+        "legend": {"displayMode": "list", "placement": "right", "values": ["percent"]},
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}
+      }
+    },
+    {
+      "id": 5,
+      "title": "Top Applications by Bytes",
+      "type": "bargauge",
+      "gridPos": {"x": 0, "y": 32, "w": 12, "h": 10},
+      "targets": [{
+        "expr": "topk(10, ndpi_observe_app_bytes_total{iface=~\"$iface\"})",
+        "legendFormat": "{{app}}"
+      }],
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": {"calcs": ["lastNotNull"]}
+      }
+    },
+    {
+      "id": 8,
+      "title": "Bits/s per Application",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 32, "w": 12, "h": 10},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {"lineWidth": 1, "fillOpacity": 10}
+        }
+      },
+      "targets": [{
+        "expr": "topk(10, rate(ndpi_observe_app_bytes_total{iface=~\"$iface\"}[1m])) * 8",
+        "legendFormat": "{{app}}"
+      }]
+    },
+    {
+      "id": 9,
+      "title": "Packets/s per Application",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 42, "w": 24, "h": 10},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": {"lineWidth": 1, "fillOpacity": 10}
+        }
+      },
+      "targets": [{
+        "expr": "topk(10, rate(ndpi_observe_app_packets_total{iface=~\"$iface\"}[1m]))",
+        "legendFormat": "{{app}}"
+      }]
+    },
+    {
+      "id": 10,
+      "title": "ndpid CPU Usage",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 42, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {"lineWidth": 2, "fillOpacity": 15}
+        }
+      },
+      "targets": [{
+        "expr": "sum(rate(process_cpu_seconds_total{job=\"ndpi-observe\",iface=~\"$iface\"}[1m]))",
+        "legendFormat": "CPU ({{iface}})"
+      }]
+    },
+    {
+      "id": 11,
+      "title": "ndpid Memory (RSS)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 42, "w": 12, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {"lineWidth": 2, "fillOpacity": 15}
+        }
+      },
+      "targets": [{
+        "expr": "sum(process_resident_memory_bytes{job=\"ndpi-observe\",iface=~\"$iface\"})",
+        "legendFormat": "RSS ({{iface}})"
+      }]
+    },
+    {
+      "id": 16,
+      "title": "Auto-Discovered Labels",
+      "description": "SaaS tools identified automatically from DNS hostnames — no manual configuration. Label = registered domain (SLD+TLD) extracted from observed hostnames.",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 60, "w": 8, "h": 10},
+      "options": {
+        "sortBy": [{"displayName": "Label", "desc": false}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {"custom": {"filterable": true}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "label"},
+           "properties": [{"id": "displayName", "value": "Label"}]},
+          {"matcher": {"id": "byName", "options": "id"},
+           "properties": [{"id": "displayName", "value": "App ID"},
+                          {"id": "custom.width", "value": 70}]},
+          {"matcher": {"id": "byName", "options": "Value"},
+           "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "iface"},
+           "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "Time"},
+           "properties": [{"id": "custom.hidden", "value": true}]}
+        ]
+      },
+      "targets": [{
+        "expr": "ndpi_observe_dyn_label_info{iface=~\"$iface\"}",
+        "legendFormat": "",
+        "instant": true,
+        "format": "table"
+      }],
+      "transformations": [
+        {"id": "filterFieldsByName", "options": {"include": {"names": ["label","id","Value","iface","Time"]}}},
+        {"id": "sortBy", "options": {"fields": [{"displayName": "Label", "desc": false}]}}
+      ]
+    },
+    {
+      "id": 15,
+      "title": "DNS Cache Entries",
+      "description": "All active IP→hostname mappings observed from DNS A responses. TTL = seconds until expiry.",
+      "type": "table",
+      "gridPos": {"x": 8, "y": 60, "w": 16, "h": 10},
+      "options": {
+        "sortBy": [{"displayName": "hostname", "desc": false}],
+        "footer": {"show": false}
+      },
+      "fieldConfig": {
+        "defaults": {"custom": {"filterable": true}},
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "ip"},
+           "properties": [{"id": "displayName", "value": "IP"}]},
+          {"matcher": {"id": "byName", "options": "hostname"},
+           "properties": [{"id": "displayName", "value": "Hostname"}]},
+          {"matcher": {"id": "byName", "options": "Value"},
+           "properties": [{"id": "displayName", "value": "TTL (s)"},
+                          {"id": "unit", "value": "s"},
+                          {"id": "custom.width", "value": 80}]},
+          {"matcher": {"id": "byName", "options": "iface"},
+           "properties": [{"id": "custom.hidden", "value": true}]},
+          {"matcher": {"id": "byName", "options": "Time"},
+           "properties": [{"id": "custom.hidden", "value": true}]}
+        ]
+      },
+      "targets": [{
+        "expr": "ndpi_observe_dns_cache_entry{iface=~\"$iface\"}",
+        "legendFormat": "",
+        "instant": true,
+        "format": "table"
+      }],
+      "transformations": [
+        {"id": "filterFieldsByName", "options": {"include": {"names": ["ip","hostname","Value","iface","Time"]}}},
+        {"id": "sortBy", "options": {"fields": [{"displayName": "hostname", "desc": false}]}}
+      ]
+    },
+    {
+      "id": 14,
+      "title": "DNS Cache Occupancy",
+      "description": "Active IP→hostname entries in the passive DNS cache (populated from observed DNS A responses). Used for flow classification confirmation.",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 70, "w": 24, "h": 8},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"lineWidth": 2, "fillOpacity": 15},
+          "min": 0
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "capacity"},
+           "properties": [{"id": "custom.lineStyle", "value": {"fill": "dash"}},
+                          {"id": "color", "value": {"mode": "fixed", "fixedColor": "gray"}}]}
+        ]
+      },
+      "targets": [
+        {
+          "expr": "ndpi_observe_dns_cache_entries{iface=~\"$iface\"}",
+          "legendFormat": "entries"
+        },
+        {
+          "expr": "ndpi_observe_dns_cache_size{iface=~\"$iface\"}",
+          "legendFormat": "capacity"
+        }
+      ]
+    }
+  ]
+}

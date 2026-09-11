@@ -1,0 +1,19 @@
+Source: ndpi-observe
+Section: net
+Priority: optional
+Maintainer: PacketFlow <garyachy@gmail.com>
+Build-Depends: debhelper-compat (= 13), clang, llvm, libbpf-dev, libndpi-dev, linux-headers-generic, bpftool
+Standards-Version: 4.6.0
+Homepage: https://packetlens.dev
+
+Package: ndpi-observe
+Architecture: amd64 arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}, libbpf0 | libbpf1, libndpi4 | libndpi-dev, iproute2
+Recommends: prometheus, grafana
+Description: TC eBPF + nDPI traffic classifier daemon
+ ndpi-observe classifies network traffic by application using TC eBPF and the
+ nDPI library. After an initial classification (first ~8 packets), all
+ subsequent packets are counted entirely in-kernel via BPF PERCPU_ARRAY —
+ zero userspace copies. Exposes per-application metrics via Prometheus.
+ .
+ Includes ndpid (daemon) and ndpictl (CLI).
